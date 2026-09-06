@@ -59,6 +59,14 @@ const TIPOS_BENEFICIO = [
   "Outro",
 ];
 
+/* A versão do que está rodando NESTE aparelho.
+ *
+ * Existe para uma pergunta que não tinha resposta: quando algo não
+ * funciona no celular, saber se o app é o novo ou um pedaço velho preso no
+ * cache. Aparece no diagnóstico, e sobe junto com a VERSAO do sw.js e com
+ * o ?v= dos arquivos no index.html — os três SEMPRE juntos. */
+const VERSAO_APP = 24;
+
 const PADRAO = {
   versao: 1,
   eu: { nome: "", instituicao: "" },
@@ -2861,6 +2869,7 @@ async function pintarDiagnostico() {
      </span></div>`;
 
   $("#detalhes-diagnostico").innerHTML = [
+    linha("Versão do app neste aparelho", "v" + VERSAO_APP),
     linha("Aberturas contadas",
       d.desde ? `${d.aberturas} desde ${dataCurta(d.desde)}` : String(d.aberturas),
       d.aberturas > 1 ? "ok" : "cuidado"),

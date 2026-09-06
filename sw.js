@@ -9,14 +9,18 @@
  * Suba a VERSAO quando quiser forçar a limpeza imediata de todo mundo.
  */
 
-const VERSAO = "tino-v23";
+const VERSAO = "tino-v24";
+
+/* Os arquivos vão com o mesmo ?v= que o index.html usa, senão o install
+   busca uma cópia sem versão e o navegador entrega a dele, antiga. */
+const V = VERSAO.split("-v")[1];
 
 const CASCA = [
   "./",
   "./index.html",
-  "./estilo.css",
-  "./nuvem.js",
-  "./app.js",
+  "./estilo.css?v=" + V,
+  "./nuvem.js?v=" + V,
+  "./app.js?v=" + V,
   "./manifest.json",
   "./icone-192.png",
   "./icone-512.png",
