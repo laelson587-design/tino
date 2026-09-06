@@ -389,6 +389,8 @@ function criar(bruto, nome, outros) {
     beneficioEm: null,
     renda: null,
     rendaEm: null,
+    outrosBancos: 0,
+    outrosBancosEm: null,
     contratos: [],
     eventos: [],
   };
@@ -630,6 +632,20 @@ function isoDia(d) {
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
 }
 
+/**
+ * Arredonda para centavos. Conta de dinheiro em ponto flutuante deixa
+ * resíduo: 1616,67 × 0,60 dá 970,002, e esse meio centavo já fez o app
+ * dizer que ainda cabia margem quando não cabia mais nada.
+ */
+function centavos(v) {
+  return Math.round((Number(v) || 0) * 100) / 100;
+}
+
+/** Dinheiro como se digita num campo: sempre com os centavos. */
+function paraCampo(v) {
+  return v ? centavos(v).toFixed(2).replace(".", ",") : "";
+}
+
 function dinheiro(v) {
   return "R$ " + Number(v || 0).toLocaleString("pt-BR",
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -737,21 +753,54 @@ function rendaDe(c) {
 function tetoDe(c) {
   const r = rendaDe(c);
   if (!(Number(r.valor) > 0)) return null;
-  return Number(r.valor) * (FATIA[r.onde] || FATIA.OUTRO);
+  return centavos(Number(r.valor) * (FATIA[r.onde] || FATIA.OUTRO));
 }
 
 /** A soma das parcelas que ainda estão correndo. */
 function comprometidoDe(c, ate = hoje()) {
-  return contratosDe(c)
+  return centavos(contratosDe(c)
     .filter((k) => contratoEmAberto(k, ate))
-    .reduce((s, k) => s + Number(k.parcela || 0), 0);
+    .reduce((s, k) => s + Number(k.parcela || 0), 0));
+}
+
+/**
+ * O que o cliente já tem preso em OUTROS bancos, por mês.
+ *
+ * Não é contrato: é um total que ele informa e que o app não tem como
+ * fazer andar sozinho. Contrato cadastrado aqui o app avança mês a mês e
+ * sabe quando acaba; este número só encolhe quando alguém for lá conferir
+ * de novo. Por isso ele anda com a data em que foi informado, e a tela
+ * mostra essa data: número de margem velho vale menos que nenhum.
+ */
+function outrosBancosDe(c) {
+  return Number((c && c.outrosBancos) || 0);
 }
 
 /** Quanto ainda cabe de parcela. null quando a renda não foi informada. */
 function margemDe(c, ate = hoje()) {
   const teto = tetoDe(c);
   if (teto === null) return null;
-  return teto - comprometidoDe(c, ate);
+  return centavos(teto - comprometidoDe(c, ate) - outrosBancosDe(c));
+}
+
+/**
+ * Guarda o comprometido fora. Ajuste com carimbo próprio, como a renda:
+ * entre dois aparelhos vence quem informou por último, e o lado que nunca
+ * ouviu falar do campo não apaga o do outro.
+ */
+function anotarOutrosBancos(c, bruto) {
+  const v = lerDinheiro(bruto);
+  const valor = v && v > 0 ? v : 0;
+  if (outrosBancosDe(c) === valor) return "igual";
+
+  c.outrosBancos = valor;
+  c.outrosBancosEm = new Date().toISOString();
+  registrar(c, "OUTROS_BANCOS", {
+    texto: valor
+      ? "Comprometido em outros bancos: " + dinheiro(valor) + " por mês"
+      : "Sem nada comprometido em outros bancos",
+  });
+  return valor ? "gravado" : "apagado";
 }
 
 // ------------------------------------------------------- gravar contratos
@@ -1706,6 +1755,7 @@ const ROTULO_EVENTO = {
   NUMERO: "Número",
   CONTRATO: "Contrato",
   RENDA: "Renda anotada",
+  OUTROS_BANCOS: "Comprometido fora",
 };
 
 /**
@@ -1737,7 +1787,8 @@ function pintarMargem(c) {
     return;
   }
   const preso = comprometidoDe(c);
-  const sobra = teto - preso;
+  const fora = outrosBancosDe(c);
+  const sobra = teto - preso - fora;
   const r = rendaDe(c);
 
   el.classList.remove("oculto");
@@ -1747,8 +1798,15 @@ function pintarMargem(c) {
     `<p class="detalhe">${escapar(
       sobra > 0 ? "ainda cabe de parcela" : "margem no talo")}</p>` +
     `<p class="conta">${escapar(
-      dinheiro(teto) + " de teto (" + (r.onde === "CREFISA" ? "60%" : "35%")
-      + " de " + dinheiro(r.valor) + ") menos " + dinheiro(preso) + " já comprometidos")}</p>`;
+      dinheiro(teto) + " de teto — " + (r.onde === "CREFISA" ? "60%" : "35%")
+      + " de " + dinheiro(r.valor))}</p>` +
+    `<p class="conta">${escapar("menos " + dinheiro(preso) + " nos contratos daqui")}</p>` +
+    // A data importa tanto quanto o valor: este número não anda sozinho, e
+    // margem informada há meses engana mais do que ajuda.
+    (fora
+      ? `<p class="conta">${escapar("menos " + dinheiro(fora) + " em outros bancos"
+          + (c.outrosBancosEm ? " · informado em " + dataCurta(c.outrosBancosEm) : ""))}</p>`
+      : "");
 }
 
 /**
@@ -1804,7 +1862,7 @@ function abrirEditorDeContrato(k) {
   contratoEmEdicao = k ? k.id : null;
   $("#contrato-tipo").value = k ? k.tipo : "NOVO";
   $("#contrato-prazo").value = k ? k.prazo : "";
-  $("#contrato-parcela").value = k ? String(k.parcela).replace(".", ",") : "";
+  $("#contrato-parcela").value = k ? paraCampo(k.parcela) : "";
   $("#contrato-primeira").value = k ? k.primeiraEm : "";
   $("#contrato-taxa").value = k && k.taxa ? String(k.taxa).replace(".", ",") : "";
   $("#contrato-pagas").value = "";
@@ -1871,8 +1929,9 @@ function abrirFicha(k) {
   $("#ficha-beneficio-resumo").classList.toggle("oculto", !resumo);
 
   const r = rendaDe(c);
-  $("#ficha-renda-valor").value = r.valor ? String(r.valor).replace(".", ",") : "";
+  $("#ficha-renda-valor").value = paraCampo(r.valor);
   $("#ficha-renda-onde").value = r.onde;
+  $("#ficha-outros-bancos").value = paraCampo(outrosBancosDe(c));
   pintarBlocoDeContratos(c);
   abrirEditorDeContrato(null);
 
@@ -2903,11 +2962,23 @@ function ligar() {
   // Formata ao sair do campo, como o número do benefício já fazia: dinheiro
   // sem separador vira erro de leitura na hora de conferir com o sistema.
   const formatarDinheiro = (sel) => $(sel).addEventListener("blur", () => {
-    const v = lerDinheiro($(sel).value);
-    $(sel).value = v === null ? "" : v.toFixed(2).replace(".", ",");
+    $(sel).value = paraCampo(lerDinheiro($(sel).value));
   });
   formatarDinheiro("#ficha-renda-valor");
   formatarDinheiro("#contrato-parcela");
+  formatarDinheiro("#ficha-outros-bancos");
+
+  $("#ficha-outros-bancos").addEventListener("change", () => {
+    const c = estado.contatos[chaveFicha];
+    if (!c) return;
+    const desfecho = anotarOutrosBancos(c, $("#ficha-outros-bancos").value);
+    if (desfecho === "igual") return;
+    guardar();
+    abrirFicha(chaveFicha);
+    avisar(desfecho === "apagado"
+      ? "Nada comprometido fora."
+      : "Comprometido em outros bancos anotado.");
+  });
 
   $("#ficha-renda-valor").addEventListener("change", salvarRendaDaFicha);
   $("#ficha-renda-onde").addEventListener("change", salvarRendaDaFicha);

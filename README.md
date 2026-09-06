@@ -249,8 +249,18 @@ aberto já prendem. A fatia depende de onde o benefício cai — **60% para quem
 recebe na Crefisa, 35% para quem recebe em outro banco**. Contrato que termina
 devolve a parcela para a margem sozinho, sem ninguém dar baixa.
 
+**O que o cliente já tem preso em outros bancos entra na conta**, num campo
+próprio. Sem ele a margem aparece maior do que é: cliente com R$ 970 de teto que
+já pegou R$ 450 fora tem R$ 520, não R$ 970.
+
+Esse número é diferente dos contratos em um ponto que importa: **o app não
+consegue fazê-lo andar sozinho**. Contrato cadastrado aqui ele avança mês a mês
+e sabe quando acaba; "R$ 450 em outros bancos" só encolhe quando alguém for
+conferir de novo. Por isso ele é guardado **com a data em que foi informado**, e
+a tela mostra essa data — margem velha engana mais do que ajuda.
+
 Na tela de Discar isso é **uma linha, sem botão**. Na ficha é um cartão com a
-conta aberta, para conferir contra o sistema.
+conta aberta linha a linha, para conferir contra o sistema.
 
 ### Cadastrar um contrato
 

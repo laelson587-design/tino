@@ -300,6 +300,10 @@ function mesclarContato(a, b) {
   const donoRenda = new Date(a.rendaEm || 0) >= new Date(b.rendaEm || 0) ? a : b;
   const outroRenda = donoRenda === a ? b : a;
 
+  // O comprometido em outros bancos segue a mesma regra, com carimbo próprio.
+  const donoFora = new Date(a.outrosBancosEm || 0) >= new Date(b.outrosBancosEm || 0) ? a : b;
+  const outroFora = donoFora === a ? b : a;
+
   return {
     ...mesclarNumeros(a, b),
     nome: a.nome || b.nome || "",
@@ -312,6 +316,9 @@ function mesclarContato(a, b) {
     beneficioEm: donoBen.beneficioEm || outroBen.beneficioEm || null,
     renda: (donoRenda.rendaEm ? donoRenda.renda : null) || outroRenda.renda || null,
     rendaEm: donoRenda.rendaEm || outroRenda.rendaEm || null,
+    outrosBancos: Number((donoFora.outrosBancosEm ? donoFora : outroFora)
+      .outrosBancos || 0),
+    outrosBancosEm: donoFora.outrosBancosEm || outroFora.outrosBancosEm || null,
     contratos: mesclarContratos(a, b),
     eventos,
   };

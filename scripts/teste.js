@@ -48,6 +48,7 @@ const {
   parcelasRestantes, contratoEmAberto, liberaContratoEm, contratoLiberado,
   terminaContratoEm, saldoParaRefinanciar, tetoDe, margemDe, salvarContrato,
   removerContrato, primeiraPorPagas, situacaoDosContratos, anotarRenda,
+  anotarOutrosBancos, outrosBancosDe, comprometidoDe,
 } = ctx;
 
 let falhas = 0;
@@ -470,6 +471,69 @@ console.log("\n20. o que o contrato recusa e o que ele só avisa");
   ok("prazo fora da faixa é guardado", r.desfecho === "gravado");
   ok("mas com aviso", !!r.aviso, r.aviso);
   ok("e o aviso tem prioridade sobre a confirmação", /Confira/.test(r.aviso));
+}
+
+
+// ------------------------------------------------------------------ 21
+console.log("\n21. margem já tomada em outros bancos");
+{
+  limpar();
+  const c = criar("11900003333", "Com dívida fora");
+  anotarRenda(c, "1616,67", "CREFISA");            // teto 970,00
+  ok("o teto sai da renda", Math.round(tetoDe(c) * 100) / 100 === 970, tetoDe(c));
+  ok("sem nada fora, a margem é o teto", Math.round(margemDe(c) * 100) / 100 === 970);
+
+  // O caso que ele descreveu: 970 de margem, 450 já tomados fora.
+  anotarOutrosBancos(c, "450");
+  ok("desconta o que está fora", Math.round(margemDe(c) * 100) / 100 === 520,
+     margemDe(c));
+
+  // E soma com o que está cadastrado aqui.
+  salvarContrato(c, { tipo: "NOVO", prazo: 12, parcela: "200", primeiraEm: "2026-08-05" });
+  ok("soma com os contratos daqui",
+     Math.round(margemDe(c, "2026-09-05") * 100) / 100 === 320,
+     margemDe(c, "2026-09-05"));
+
+  // Encher a margem por fora trava a pessoa, igual a encher por dentro.
+  anotarOutrosBancos(c, "770");
+  const s = situacaoDosContratos(c, "2026-09-05");
+  ok("margem no talo por fora também trava", s.estado === "TRAVADO", s);
+
+  anotarOutrosBancos(c, "");
+  ok("apagar devolve a margem", Math.round(margemDe(c, "2026-09-05") * 100) / 100 === 770);
+  ok("e some do registro", outrosBancosDe(c) === 0);
+
+  // O campo NÃO pode ser confundido com os telefones, que moram em c.outros.
+  adicionarNumero(c, "1133334444");
+  anotarOutrosBancos(c, "300");
+  ok("o telefone extra continua lá", numerosDe(c).length === 2, numerosDe(c));
+}
+
+// ------------------------------------------------------------------ 22
+console.log("\n22. o comprometido fora entre dois aparelhos");
+{
+  limpar();
+  const c = criar("11900004444", "Sincronia fora");
+  anotarRenda(c, "2000", "CREFISA");
+  anotarOutrosBancos(c, "450");
+  const informado = JSON.parse(JSON.stringify(c));
+
+  const semNada = JSON.parse(JSON.stringify(c));
+  semNada.outrosBancos = 0;
+  semNada.outrosBancosEm = null;
+
+  ok("quem não sabe não apaga quem sabe",
+     mesclarContato(semNada, informado).outrosBancos === 450);
+  ok("dá no mesmo na ordem trocada",
+     mesclarContato(informado, semNada).outrosBancos === 450);
+
+  // Informação mais recente vence — inclusive quando ela é ZERO, que é o
+  // caso de quem foi conferir e viu que o cliente quitou lá fora.
+  const zerado = JSON.parse(JSON.stringify(informado));
+  zerado.outrosBancos = 0;
+  zerado.outrosBancosEm = new Date(Date.now() + 1000).toISOString();
+  ok("zerar depois vence o valor antigo",
+     mesclarContato(informado, zerado).outrosBancos === 0);
 }
 
 console.log(falhas ? `\n${falhas} FALHA(S)\n` : "\ntudo passou\n");
