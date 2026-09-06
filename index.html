@@ -600,15 +600,16 @@
                autocomplete="off">
       </label>
       <label class="marcavel">
-        <input id="sim-tcc" type="checkbox" checked>
+        <input id="sim-tcc" type="checkbox">
         <span>Cobrar tarifa de cadastro (R$ 130)</span>
       </label>
       <button id="sim-calcular" class="principal" type="button">Calcular o troco</button>
       <div id="sim-resultado" class="sim-resultado oculto"></div>
       <p class="dica">Estimativa para você decidir se vale a ligação — não é
-         valor para prometer ao cliente. O IOF é estimado pelo prazo e a tarifa
-         é suposição: as duas erram para o lado de prometer <b>menos</b>, então o
-         sistema tende a liberar um pouco mais, nunca menos.</p>
+         valor para prometer ao cliente. O IOF é estimado pelo prazo e erra cerca
+         de 1% para <b>menos</b>, então o sistema tende a liberar um pouco mais.
+         A tarifa vem desligada porque dois contratos reais mostraram que ela não
+         é cobrada de quem já tem cadastro — ligue se for o primeiro da pessoa.</p>
     </details>
 
     <h3>Retorno</h3>

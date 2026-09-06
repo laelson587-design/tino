@@ -323,13 +323,26 @@ Duas coisas o app não sabe ao certo: o **IOF**, que é estimado pelo prazo, e a
 **tarifa de cadastro**, que é botão porque ainda não se sabe se refinanciamento
 cobra (a cláusula II.6 fala em cadastro novo; refinanciamento é contrato novo).
 
-As duas erram de propósito para o lado de **prometer menos**:
+**A tarifa vem DESLIGADA**, e isso mudou em 06/09/2026 com dois contratos
+reais. A mesma cliente, no mesmo dia, contratou por R$ 100 de parcela em dois
+prazos: **10x liberou R$ 476 e 15x liberou R$ 538**, com a primeira parcela 20
+dias depois (contrato dia 5, benefício dia 25).
 
-- Cobrei tarifa e não existia → o troco real chega **maior**. Cliente feliz.
-- Não cobrei e existia → chega **menor**. Perdeu a venda.
+Dois contratos com a mesma parcela resolvem a conta sozinhos: a diferença de
+R$ 62 entre eles **anula a tarifa**, porque ela seria a mesma nos dois. Sobra
+uma equação com uma incógnita, e a taxa que ela devolve é **17,99% ao mês** —
+que é exatamente a dos dois contratos já validados, sem que ela tenha sido
+informada em lugar nenhum. Com a tarifa cobrada, a taxa teria de ser **10,91%
+ao mês**, metade do que o produto pratica.
 
-Por isso a tarifa vem ligada. E por isso o painel diz, na própria tela, que o
-número é para **você decidir se vale a ligação** — não para prometer ao cliente.
+Isso derruba a hipótese de que todo contrato novo paga tarifa. Sobram duas
+explicações — cláusula II.6 (só no primeiro cadastro) ou nunca cobra — e nas
+duas o **refinanciamento não paga**, porque quem refinancia já tem cadastro.
+Ligue o botão só quando for o primeiro contrato da pessoa.
+
+O IOF continua estimado, e nesses dois contratos ele erra cerca de **1,5% para
+menos** — o lado seguro. Por isso o painel diz, na própria tela, que o número é
+para **você decidir se vale a ligação**, não para prometer ao cliente.
 
 O **total a pagar** aparece junto de propósito. Consultor que diz o total na
 hora não é desmentido depois, e cliente que se sentiu enganado é o que denuncia
