@@ -50,7 +50,8 @@ const {
   removerContrato, primeiraPorPagas, situacaoDosContratos, anotarRenda,
   anotarOutrosBancos, outrosBancosDe, comprometidoDe,
   instantes, fatorVP, iofEstimado, diasAtePrimeira, parcelaMaximaNoRefi,
-  simularRefinanciamento, centavos,
+  simularRefinanciamento, centavos, diaDoBeneficioDe, anotarDiaDoBeneficio,
+  contratoForaDoDia,
 } = ctx;
 
 let falhas = 0;
@@ -641,6 +642,104 @@ console.log("\n25. a carência do contrato novo sai do dia do benefício");
   const k31 = { prazo: 12, parcela: 100, primeiraEm: "2026-01-31", taxa: 18 };
   ok("dia 31 não transborda de mês",
      diasAtePrimeira(k31, "2026-11-15") <= 31, diasAtePrimeira(k31, "2026-11-15"));
+}
+
+
+// ------------------------------------------------------------------ 26
+console.log("\n26. o dia do benefício é da pessoa, não do contrato");
+{
+  limpar();
+  const c = criar("11900005555", "Dia");
+  ok("sem contrato e sem informar, não há dia", diaDoBeneficioDe(c) === null);
+
+  // Deduz dos contratos que já existem: quem já cadastrou não digita nada.
+  salvarContrato(c, { tipo: "NOVO", prazo: 12, parcela: "100",
+                      primeiraEm: "2026-03-25", taxa: "18" });
+  salvarContrato(c, { tipo: "NOVO", prazo: 15, parcela: "100",
+                      primeiraEm: "2026-05-25", taxa: "18" });
+  ok("deduz o dia dos contratos", diaDoBeneficioDe(c) === 25, diaDoBeneficioDe(c));
+
+  // Com um contrato divergente, vence o dia mais repetido.
+  salvarContrato(c, { tipo: "NOVO", prazo: 6, parcela: "100",
+                      primeiraEm: "2026-06-05", taxa: "18" });
+  ok("o dia mais repetido ganha do avulso", diaDoBeneficioDe(c) === 25,
+     diaDoBeneficioDe(c));
+
+  // Informado à mão manda em tudo.
+  ok("aceita o dia informado", anotarDiaDoBeneficio(c, "10") === "gravado");
+  ok("e ele vence a dedução", diaDoBeneficioDe(c) === 10);
+  ok("recusa dia fora de 1 a 31", anotarDiaDoBeneficio(c, "32") === "invalido");
+  ok("recusar não estraga o que já estava", diaDoBeneficioDe(c) === 10);
+  ok("apagar volta para a dedução",
+     anotarDiaDoBeneficio(c, "") === "apagado" && diaDoBeneficioDe(c) === 25,
+     diaDoBeneficioDe(c));
+}
+
+// ------------------------------------------------------------------ 27
+console.log("\n27. o aviso de contrato fora do dia");
+{
+  limpar();
+  const c = criar("11900006666", "Conferência");
+  salvarContrato(c, { tipo: "NOVO", prazo: 12, parcela: "100",
+                      primeiraEm: "2026-03-25", taxa: "18" });
+  salvarContrato(c, { tipo: "NOVO", prazo: 12, parcela: "100",
+                      primeiraEm: "2026-03-05", taxa: "18" });
+  const [certo, torto] = contratosDe(c);
+
+  // Sem o dia INFORMADO, não acusa nada: deduzir e depois acusar contra a
+  // própria dedução acusaria o contrato que gerou a dedução.
+  ok("sem o dia informado, não acusa", !contratoForaDoDia(c, torto));
+
+  anotarDiaDoBeneficio(c, "25");
+  ok("o que cai no dia não é acusado", !contratoForaDoDia(c, certo));
+  ok("o que cai fora é acusado", contratoForaDoDia(c, torto));
+}
+
+// ------------------------------------------------------------------ 28
+console.log("\n28. a carência da simulação segue o dia da pessoa");
+{
+  limpar();
+  const c = criar("11900007777", "Carência");
+  anotarRenda(c, "3000", "CREFISA");
+  // Contrato com data ERRADA (dia 5), pessoa recebe dia 25.
+  salvarContrato(c, { tipo: "NOVO", prazo: 15, parcela: "300",
+                      primeiraEm: "2026-01-05", taxa: "18" });
+  anotarDiaDoBeneficio(c, "25");
+  const k = contratosDe(c)[0];
+
+  // Em 06/09 o próximo dia 25 são 19 dias; o dia 5 daria 29.
+  const s = simularRefinanciamento(c, k, { ate: "2026-09-06", prazo: 18 });
+  ok("a carência veio do dia da pessoa, não da data do contrato",
+     s.dias === 19, s.dias);
+
+  anotarDiaDoBeneficio(c, "");
+  const semDia = simularRefinanciamento(c, k, { ate: "2026-09-06", prazo: 18 });
+  ok("sem o dia informado, volta a deduzir do contrato", semDia.dias === 29,
+     semDia.dias);
+}
+
+// ------------------------------------------------------------------ 29
+console.log("\n29. o dia do benefício entre dois aparelhos");
+{
+  limpar();
+  const c = criar("11900008888", "Sincronia do dia");
+  anotarDiaDoBeneficio(c, "25");
+  const informado = JSON.parse(JSON.stringify(c));
+
+  const semNada = JSON.parse(JSON.stringify(c));
+  semNada.diaDoBeneficio = 0;
+  semNada.diaDoBeneficioEm = null;
+  ok("quem não sabe não apaga quem sabe",
+     mesclarContato(semNada, informado).diaDoBeneficio === 25);
+  ok("dá no mesmo na ordem trocada",
+     mesclarContato(informado, semNada).diaDoBeneficio === 25);
+
+  // Zero é valor legítimo aqui — quer dizer 'apagado de propósito'.
+  const apagado = JSON.parse(JSON.stringify(informado));
+  apagado.diaDoBeneficio = 0;
+  apagado.diaDoBeneficioEm = new Date(Date.now() + 1000).toISOString();
+  ok("apagar depois vence o valor antigo",
+     mesclarContato(informado, apagado).diaDoBeneficio === 0);
 }
 
 console.log(falhas ? `\n${falhas} FALHA(S)\n` : "\ntudo passou\n");

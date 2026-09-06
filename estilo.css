@@ -563,3 +563,12 @@ button { font: inherit; cursor: pointer; }
   margin: 10px 0 0; font-size: 13px; font-weight: 600; color: var(--atencao);
 }
 .sim-resultado.ruim .aviso { color: var(--ruim); }
+
+/* O aviso de contrato cuja data não cai no dia do benefício. Data errada
+   desloca a liberação em um mês inteiro, então isto precisa saltar aos
+   olhos dentro do cartão — mas sem virar erro, porque pode ser exceção. */
+.contrato .fora-do-dia {
+  margin: 6px 0 0; padding: 7px 9px;
+  font-size: 13px; font-weight: 600; color: var(--atencao);
+  background: var(--atencao-fraco); border-radius: 8px;
+}

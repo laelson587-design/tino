@@ -389,6 +389,8 @@ function criar(bruto, nome, outros) {
     beneficioEm: null,
     renda: null,
     rendaEm: null,
+    diaDoBeneficio: 0,
+    diaDoBeneficioEm: null,
     outrosBancos: 0,
     outrosBancosEm: null,
     contratos: [],
@@ -749,6 +751,60 @@ function rendaDe(c) {
   return { valor: 0, onde: "OUTRO", ...((c && c.renda) || {}) };
 }
 
+/**
+ * O dia do mês em que o benefício cai — e portanto em que TODO contrato
+ * desta pessoa desconta.
+ *
+ * É da PESSOA, não do contrato. Antes ele vivia escondido dentro da data da
+ * primeira parcela de cada contrato: numa cliente com quatro, o mesmo dia
+ * estava guardado quatro vezes, e errar um fazia os quatro discordarem em
+ * silêncio.
+ *
+ * Quando não foi informado, é DEDUZIDO dos contratos que já existem — o dia
+ * mais repetido entre eles. Assim quem já tem contrato cadastrado não
+ * precisa digitar nada, e o campo só é pedido a quem ainda não tem nenhum.
+ */
+function diaDoBeneficioDe(c) {
+  const informado = Number((c && c.diaDoBeneficio) || 0);
+  if (informado >= 1 && informado <= 31) return informado;
+
+  const contagem = new Map();
+  for (const k of contratosDe(c)) {
+    const d = dia(k.primeiraEm).getDate();
+    contagem.set(d, (contagem.get(d) || 0) + 1);
+  }
+  let melhor = 0, vezes = 0;
+  for (const [d, q] of contagem) if (q > vezes) { melhor = d; vezes = q; }
+  return melhor || null;
+}
+
+/** Guarda o dia. Ajuste com carimbo próprio, como a renda e o CPF. */
+function anotarDiaDoBeneficio(c, bruto) {
+  const t = String(bruto == null ? "" : bruto).trim();
+  const d = t === "" ? 0 : Number(t);
+  if (t !== "" && (!Number.isInteger(d) || d < 1 || d > 31)) return "invalido";
+  if (Number(c.diaDoBeneficio || 0) === d) return "igual";
+
+  c.diaDoBeneficio = d;
+  c.diaDoBeneficioEm = new Date().toISOString();
+  registrar(c, "DIA_BENEFICIO", {
+    texto: d ? "Benefício cai no dia " + d : "Dia do benefício apagado",
+  });
+  return d ? "gravado" : "apagado";
+}
+
+/**
+ * Um contrato cujo vencimento não cai no dia do benefício. Não é erro de
+ * digitação garantido — mas é o erro mais caro que existe aqui, porque
+ * desloca a data de liberação em um mês inteiro e faz ligar na hora errada
+ * sem ninguém entender o motivo. Por isso a ficha avisa em vez de calar.
+ */
+function contratoForaDoDia(c, k) {
+  const d = Number((c && c.diaDoBeneficio) || 0);
+  if (!(d >= 1 && d <= 31)) return false;   // só confere contra o INFORMADO
+  return dia(k.primeiraEm).getDate() !== d;
+}
+
 /** O teto de parcela que a renda aguenta. null = não se sabe a renda. */
 function tetoDe(c) {
   const r = rendaDe(c);
@@ -865,8 +921,11 @@ const PRAZO_PADRAO_REFI = 18;
  * contrato novo assinado hoje vence no próximo desses dias — é assim que a
  * carência nasce, e ela vale vários por cento na parcela.
  */
-function diasAtePrimeira(contrato, de = hoje()) {
-  const diaDoMes = dia(contrato.primeiraEm).getDate();
+function diasAtePrimeira(contrato, de = hoje(), contato = null) {
+  // O dia da pessoa manda, quando existe: é ele que o banco usa, e os
+  // contratos dela deveriam todos cair nele.
+  const diaDoMes = (contato && diaDoBeneficioDe(contato))
+    || dia(contrato.primeiraEm).getDate();
   const h = dia(de);
   const ultimoDoMes = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
   let alvo = new Date(h.getFullYear(), h.getMonth(), Math.min(diaDoMes, ultimoDoMes));
@@ -918,7 +977,7 @@ function simularRefinanciamento(c, contrato, opcoes = {}) {
   const parcela = centavos(opcoes.parcela != null ? lerDinheiro(opcoes.parcela) : teto);
   if (!(parcela > 0)) return { erro: "Parcela inválida." };
 
-  const dias = opcoes.dias != null ? Number(opcoes.dias) : diasAtePrimeira(contrato, ate);
+  const dias = opcoes.dias != null ? Number(opcoes.dias) : diasAtePrimeira(contrato, ate, c);
   const t = instantes(prazo, dias);
 
   const financiado = centavos(parcela * fatorVP(t, taxa));
@@ -1893,6 +1952,7 @@ const ROTULO_EVENTO = {
   CONTRATO: "Contrato",
   RENDA: "Renda anotada",
   OUTROS_BANCOS: "Comprometido fora",
+  DIA_BENEFICIO: "Dia do benefício",
 };
 
 /**
@@ -1985,6 +2045,10 @@ function pintarListaDeContratos(c) {
       <p class="andamento">${pagas} de ${k.prazo} pagas${
         aberto ? " · faltam " + faltam : ""}</p>
       <p class="situacao">${escapar(situacao.texto)}</p>
+      ${contratoForaDoDia(c, k)
+        ? `<p class="fora-do-dia">${escapar("Vence dia " + dia(k.primeiraEm).getDate()
+            + ", mas o benefício cai dia " + c.diaDoBeneficio + ". Confira a data.")}</p>`
+        : ""}
       ${aberto ? `<p class="quitacao">Levar no refinanciamento: ${escapar(dinheiro(saldoParaRefinanciar(k)))}</p>` : ""}
       <div class="acoes">
         <button class="secundario" data-editar-contrato="${escapar(k.id)}">Corrigir</button>
@@ -2003,7 +2067,10 @@ function abrirEditorDeContrato(k) {
   $("#contrato-primeira").value = k ? k.primeiraEm : "";
   $("#contrato-taxa").value = k && k.taxa ? String(k.taxa).replace(".", ",") : "";
   $("#contrato-pagas").value = "";
-  $("#contrato-dia").value = "";
+  // Já vem com o dia da pessoa: é sempre o mesmo, e digitar de novo a cada
+  // contrato é onde nasce a divergência.
+  const doContato = estado.contatos[chaveFicha];
+  $("#contrato-dia").value = (doContato && diaDoBeneficioDe(doContato)) || "";
   $("#ficha-contrato-titulo").textContent = k ? "Corrigir contrato" : "Cadastrar contrato";
   $("#contrato-salvar").textContent = k ? "Guardar correção" : "Guardar contrato";
   $("#contrato-cancelar").classList.toggle("oculto", !k);
@@ -2135,6 +2202,9 @@ function abrirFicha(k) {
   $("#ficha-renda-valor").value = paraCampo(r.valor);
   $("#ficha-renda-onde").value = r.onde;
   $("#ficha-outros-bancos").value = paraCampo(outrosBancosDe(c));
+  $("#ficha-dia-beneficio").value = c.diaDoBeneficio || "";
+  $("#ficha-dia-beneficio").placeholder = diaDoBeneficioDe(c)
+    ? "deduzido dos contratos: " + diaDoBeneficioDe(c) : "25";
   pintarBlocoDeContratos(c);
   abrirEditorDeContrato(null);
   pintarSimulador(c);
@@ -3171,6 +3241,17 @@ function ligar() {
   formatarDinheiro("#ficha-renda-valor");
   formatarDinheiro("#contrato-parcela");
   formatarDinheiro("#ficha-outros-bancos");
+
+  $("#ficha-dia-beneficio").addEventListener("change", () => {
+    const c = estado.contatos[chaveFicha];
+    if (!c) return;
+    const desfecho = anotarDiaDoBeneficio(c, $("#ficha-dia-beneficio").value);
+    if (desfecho === "invalido") return avisar("O dia do benefício vai de 1 a 31.");
+    if (desfecho === "igual") return;
+    guardar();
+    abrirFicha(chaveFicha);
+    avisar(desfecho === "apagado" ? "Dia apagado." : "Dia do benefício anotado.");
+  });
 
   $("#ficha-outros-bancos").addEventListener("change", () => {
     const c = estado.contatos[chaveFicha];

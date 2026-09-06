@@ -262,6 +262,26 @@ a tela mostra essa data — margem velha engana mais do que ajuda.
 Na tela de Discar isso é **uma linha, sem botão**. Na ficha é um cartão com a
 conta aberta linha a linha, para conferir contra o sistema.
 
+### O dia do benefício
+
+Fica na ficha, junto do CPF, e é **da pessoa, não do contrato** — todo contrato
+dela desconta no mesmo dia. Antes ele vivia escondido dentro da data da primeira
+parcela de cada um: numa cliente com quatro contratos, o mesmo dia estava
+guardado quatro vezes, e errar um fazia os quatro discordarem em silêncio.
+
+Ele faz três coisas:
+
+- **Preenche o conversor** de "não sei a data" em todo contrato novo, para você
+  digitar uma vez em vez de quatro.
+- **Manda na carência da simulação**, que é o que decide a parcela.
+- **Confere as datas.** Contrato cuja primeira parcela não cai nesse dia ganha
+  um aviso no cartão. Data errada é o erro mais caro daqui: desloca a liberação
+  em um mês inteiro e faz ligar na hora errada sem ninguém entender por quê.
+
+Quem já tem contrato cadastrado **não precisa digitar nada** — o app deduz o dia
+mais repetido entre os contratos. O aviso de divergência só aparece com o dia
+informado à mão, senão ele acusaria justamente o contrato que gerou a dedução.
+
 ### Cadastrar um contrato
 
 Na ficha da pessoa. Precisa de quatro coisas: tipo, prazo, valor da parcela e

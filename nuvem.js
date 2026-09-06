@@ -304,6 +304,11 @@ function mesclarContato(a, b) {
   const donoFora = new Date(a.outrosBancosEm || 0) >= new Date(b.outrosBancosEm || 0) ? a : b;
   const outroFora = donoFora === a ? b : a;
 
+  // O dia do benefício, com carimbo próprio. Zero é valor legítimo (quer
+  // dizer "apagado"), então quem tem o carimbo manda — não dá para usar ||.
+  const donoDia = new Date(a.diaDoBeneficioEm || 0) >= new Date(b.diaDoBeneficioEm || 0) ? a : b;
+  const outroDia = donoDia === a ? b : a;
+
   return {
     ...mesclarNumeros(a, b),
     nome: a.nome || b.nome || "",
@@ -319,6 +324,9 @@ function mesclarContato(a, b) {
     outrosBancos: Number((donoFora.outrosBancosEm ? donoFora : outroFora)
       .outrosBancos || 0),
     outrosBancosEm: donoFora.outrosBancosEm || outroFora.outrosBancosEm || null,
+    diaDoBeneficio: Number((donoDia.diaDoBeneficioEm ? donoDia : outroDia)
+      .diaDoBeneficio || 0),
+    diaDoBeneficioEm: donoDia.diaDoBeneficioEm || outroDia.diaDoBeneficioEm || null,
     contratos: mesclarContratos(a, b),
     eventos,
   };
