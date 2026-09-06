@@ -803,6 +803,143 @@ function anotarOutrosBancos(c, bruto) {
   return valor ? "gravado" : "apagado";
 }
 
+// -------------------------------------------------- simular o refinanciamento
+
+/* A matemática daqui para baixo veio da calculadora, sem alteração:
+ * https://github.com/laelson587-design/calculadora-consignado
+ *
+ * Lá ela foi conferida AO CENTAVO contra dois demonstrativos de CET reais
+ * (15x/R$ 633,49/carência 40 dias e 9x/R$ 260,00/carência 25 dias), o que é a
+ * única razão de eu confiar nela aqui. Está copiada em vez de importada porque
+ * o Tino não tem passo de build e não vai ter — são funções puras e estáveis.
+ *
+ * SE MEXER NUMA, MEXA NA OUTRA. Os dois projetos precisam continuar dando o
+ * mesmo número, senão o consultor recebe respostas diferentes para a mesma
+ * pergunta em dois lugares e deixa de confiar nos dois.
+ */
+
+/**
+ * Instantes de cada parcela, em meses a partir da liberação.
+ *
+ * O primeiro período costuma passar de 30 dias e entra proporcional
+ * (dias ÷ 30); das seguintes em diante soma-se um mês exato. Ignorar isso
+ * subestimou a prestação em quase 6% num contrato real.
+ */
+function instantes(n, carenciaDias) {
+  return Array.from({ length: n }, (_, k) => carenciaDias / 30 + k);
+}
+
+/** Fator de valor presente de uma série de 1 real nos instantes dados. */
+function fatorVP(t, i) {
+  return t.reduce((s, x) => s + 1 / Math.pow(1 + i, x), 0);
+}
+
+/**
+ * IOF estimado, para simular antes de o contrato existir.
+ *
+ * A estrutura é a da lei — parcela fixa mais parcela diária sobre o prazo —
+ * mas o prazo que a instituição usa não é o da amortização: aplicar a regra
+ * padrão sobre a Price dá quase o dobro do que os contratos mostram. Os dias
+ * efetivos vêm de reta ajustada a dois contratos reais.
+ *
+ * É estimativa, não fórmula oficial, e vale na faixa de prazo observada (até
+ * 18). Em toda a faixa plausível o erro move menos de R$ 2 na parcela.
+ */
+function iofEstimado(n, carenciaDias) {
+  const dias = carenciaDias + 40.9 + 5.68 * n;
+  const sobreOPrincipal = 0.0038 + 0.000082 * dias;
+  return sobreOPrincipal / (1 + sobreOPrincipal);
+}
+
+/* A tarifa de cadastro. Valor fixo, e a dúvida é QUANDO ela é cobrada: a
+   cláusula II.6 diz que é do cadastro novo, mas refinanciamento é contrato
+   novo, e isso ainda não foi conferido num contrato de refi. Fica ligada por
+   padrão de propósito — ver o comentário de simularRefinanciamento(). */
+const TCC_PADRAO = 130;
+const PRAZO_PADRAO_REFI = 18;
+
+/**
+ * Dias entre hoje e a próxima parcela, que cai no dia do benefício.
+ *
+ * O contrato guarda a data da primeira parcela, e dela sai o dia do mês. Um
+ * contrato novo assinado hoje vence no próximo desses dias — é assim que a
+ * carência nasce, e ela vale vários por cento na parcela.
+ */
+function diasAtePrimeira(contrato, de = hoje()) {
+  const diaDoMes = dia(contrato.primeiraEm).getDate();
+  const h = dia(de);
+  const ultimoDoMes = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+  let alvo = new Date(h.getFullYear(), h.getMonth(), Math.min(diaDoMes, ultimoDoMes));
+  if (alvo <= h) alvo = somarMeses(alvo, 1);
+  return Math.max(1, diasEntre(h, alvo));
+}
+
+/**
+ * Quanto de parcela cabe num refinanciamento DESTE contrato.
+ *
+ * A parcela do contrato que vai ser refinanciado volta para a margem — ele
+ * deixa de existir e o novo toma o lugar. Esquecer isso faz o app oferecer
+ * bem menos do que cabe, e é o erro que passa despercebido porque o número
+ * sai plausível.
+ */
+function parcelaMaximaNoRefi(c, contrato, ate = hoje()) {
+  const m = margemDe(c, ate);
+  if (m === null) return null;
+  return centavos(m + Number(contrato.parcela || 0));
+}
+
+/**
+ * O troco de um refinanciamento: quanto sobra para o cliente depois de o
+ * contrato novo cobrir o antigo.
+ *
+ *   financiado = parcela × fator de valor presente
+ *   recebido   = financiado × (1 − IOF) − TCC
+ *   troco      = recebido − saldo do contrato antigo, CHEIO
+ *
+ * O saldo antigo entra cheio porque refinanciamento não tem abatimento — é o
+ * que diferencia disto de uma quitação, e é o motivo de refinanciar na
+ * carência render tão pouco.
+ *
+ * TODA ESTIMATIVA AQUI ERRA PARA O LADO DE PROMETER MENOS, de propósito:
+ * cobrar TCC que não existe faz o troco real chegar MAIOR que o prometido, e
+ * cliente surpreendido para cima não desiste da venda. O contrário desiste.
+ */
+function simularRefinanciamento(c, contrato, opcoes = {}) {
+  const ate = opcoes.ate || hoje();
+  const taxa = Number(opcoes.taxa != null ? opcoes.taxa : contrato.taxa) / 100;
+  if (!(taxa > 0)) return { erro: "Falta a taxa ao mês deste contrato." };
+
+  const prazo = Number(opcoes.prazo) || PRAZO_PADRAO_REFI;
+  if (!(prazo >= 1)) return { erro: "Prazo inválido." };
+
+  const teto = parcelaMaximaNoRefi(c, contrato, ate);
+  if (teto === null) return { erro: "Falta o valor do benefício para saber a margem." };
+
+  const parcela = centavos(opcoes.parcela != null ? lerDinheiro(opcoes.parcela) : teto);
+  if (!(parcela > 0)) return { erro: "Parcela inválida." };
+
+  const dias = opcoes.dias != null ? Number(opcoes.dias) : diasAtePrimeira(contrato, ate);
+  const t = instantes(prazo, dias);
+
+  const financiado = centavos(parcela * fatorVP(t, taxa));
+  const iof = opcoes.iof != null ? Number(opcoes.iof) / 100 : iofEstimado(prazo, dias);
+  const tcc = opcoes.tcc === false ? 0 : Number(opcoes.tcc || TCC_PADRAO);
+
+  const recebido = centavos(financiado * (1 - iof) - tcc);
+  const saldo = saldoParaRefinanciar(contrato, ate);
+  const troco = centavos(recebido - saldo);
+
+  return {
+    erro: "",
+    parcela, prazo, dias, taxa, tcc,
+    passouDoTeto: parcela > teto,
+    teto,
+    iofPct: centavos(iof * 100 * 100) / 100,
+    financiado, recebido, saldo, troco,
+    totalAPagar: centavos(parcela * prazo),
+  };
+}
+
 // ------------------------------------------------------- gravar contratos
 
 function novoContratoId() {
@@ -1873,6 +2010,72 @@ function abrirEditorDeContrato(k) {
   $("#ficha-contrato-editor").open = !!k;
 }
 
+/**
+ * Enche o painel de simulação com o que o app já sabe: os contratos em
+ * aberto, a taxa daquele contrato e a parcela máxima que cabe. Quem abre
+ * o painel no meio de uma ligação não tem tempo de digitar nada.
+ */
+function pintarSimulador(c) {
+  const abertos = contratosDe(c).filter((k) => contratoEmAberto(k));
+  const painel = $("#ficha-simulador");
+  painel.classList.toggle("oculto", abertos.length === 0);
+  $("#sim-resultado").classList.add("oculto");
+  if (!abertos.length) return;
+
+  $("#sim-contrato").innerHTML = abertos.map((k) =>
+    `<option value="${escapar(k.id)}">${k.prazo}x de ${escapar(dinheiro(k.parcela))}`
+    + ` · faltam ${parcelasRestantes(k)}</option>`).join("");
+
+  encherDoContrato(c, abertos[0]);
+}
+
+/** Taxa e parcela máxima seguem o contrato escolhido no seletor. */
+function encherDoContrato(c, k) {
+  $("#sim-taxa").value = k.taxa ? paraCampo(k.taxa) : "";
+  const teto = parcelaMaximaNoRefi(c, k);
+  $("#sim-parcela").value = teto === null ? "" : paraCampo(teto);
+}
+
+/**
+ * O resultado. O troco vem grande porque é o número que decide a ligação;
+ * o resto vem pequeno porque serve para conferir contra o sistema.
+ *
+ * O total a pagar aparece de propósito. Consultor que diz o total na hora
+ * não é surpreendido depois — e cliente que se sentiu enganado é o que
+ * denuncia e derruba o número, que é o que este app existe para evitar.
+ */
+function pintarResultadoDaSimulacao(s) {
+  const el = $("#sim-resultado");
+  el.classList.remove("oculto");
+
+  if (s.erro) {
+    el.className = "sim-resultado ruim";
+    el.innerHTML = `<p class="aviso">${escapar(s.erro)}</p>`;
+    return;
+  }
+
+  const sobra = s.troco > 0;
+  el.className = "sim-resultado " + (sobra ? "tem" : "nada");
+  el.innerHTML =
+    `<p class="valor">${escapar(dinheiro(Math.max(0, s.troco)))}</p>` +
+    `<p class="detalhe">${escapar(sobra
+      ? "de troco, mais ou menos"
+      : "não sobra nada — o saldo come o contrato novo")}</p>` +
+    `<p class="conta">${escapar(s.prazo + "x de " + dinheiro(s.parcela)
+      + " · carência de " + s.dias + " dias")}</p>` +
+    `<p class="conta">${escapar("financiado " + dinheiro(s.financiado)
+      + " · IOF " + s.iofPct.toFixed(2).replace(".", ",") + "%"
+      + (s.tcc ? " · tarifa " + dinheiro(s.tcc) : " · sem tarifa"))}</p>` +
+    `<p class="conta">${escapar("menos " + dinheiro(s.saldo)
+      + " do contrato atual, cheio")}</p>` +
+    `<p class="conta forte">${escapar("o cliente pagaria "
+      + dinheiro(s.totalAPagar) + " no total")}</p>` +
+    (s.passouDoTeto
+      ? `<p class="aviso">${escapar("Atenção: essa parcela passa da margem, que é "
+          + dinheiro(s.teto) + ".")}</p>`
+      : "");
+}
+
 function pintarBlocoDeContratos(c) {
   pintarMargem(c);
   pintarListaDeContratos(c);
@@ -1934,6 +2137,7 @@ function abrirFicha(k) {
   $("#ficha-outros-bancos").value = paraCampo(outrosBancosDe(c));
   pintarBlocoDeContratos(c);
   abrirEditorDeContrato(null);
+  pintarSimulador(c);
 
   $("#ficha-nota").value = "";
   $("#ficha-conversa").value = "";
@@ -3016,6 +3220,36 @@ function ligar() {
   });
 
   $("#contrato-cancelar").addEventListener("click", () => abrirEditorDeContrato(null));
+
+  formatarDinheiro("#sim-parcela");
+
+  $("#sim-contrato").addEventListener("change", () => {
+    const c = estado.contatos[chaveFicha];
+    if (!c) return;
+    const k = contratosDe(c).find((x) => x.id === $("#sim-contrato").value);
+    if (k) encherDoContrato(c, k);
+    $("#sim-resultado").classList.add("oculto");
+  });
+
+  $("#sim-calcular").addEventListener("click", () => {
+    const c = estado.contatos[chaveFicha];
+    if (!c) return;
+    const k = contratosDe(c).find((x) => x.id === $("#sim-contrato").value);
+    if (!k) return avisar("Escolha o contrato.");
+
+    // Campo de taxa vazio precisa RECUSAR, não cair na taxa guardada no
+    // contrato: a tela mostraria o campo em branco e um troco embaixo,
+    // calculado com um número que não está em lugar nenhum da tela. Passar
+    // zero força o erro, e o painel diz o que falta.
+    const taxaCampo = $("#sim-taxa").value.trim();
+
+    pintarResultadoDaSimulacao(simularRefinanciamento(c, k, {
+      prazo: $("#sim-prazo").value,
+      taxa: taxaCampo === "" ? 0 : lerDinheiro(taxaCampo),
+      parcela: $("#sim-parcela").value,
+      tcc: $("#sim-tcc").checked ? undefined : false,
+    }));
+  });
 
   $("#ficha-contratos").addEventListener("click", (ev) => {
     const c = estado.contatos[chaveFicha];

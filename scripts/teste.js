@@ -49,6 +49,8 @@ const {
   terminaContratoEm, saldoParaRefinanciar, tetoDe, margemDe, salvarContrato,
   removerContrato, primeiraPorPagas, situacaoDosContratos, anotarRenda,
   anotarOutrosBancos, outrosBancosDe, comprometidoDe,
+  instantes, fatorVP, iofEstimado, diasAtePrimeira, parcelaMaximaNoRefi,
+  simularRefinanciamento, centavos,
 } = ctx;
 
 let falhas = 0;
@@ -534,6 +536,111 @@ console.log("\n22. o comprometido fora entre dois aparelhos");
   zerado.outrosBancosEm = new Date(Date.now() + 1000).toISOString();
   ok("zerar depois vence o valor antigo",
      mesclarContato(informado, zerado).outrosBancos === 0);
+}
+
+
+// ------------------------------------------------------------------ 23
+console.log("\n23. a matemática bate com os contratos reais da calculadora");
+{
+  // Os dois demonstrativos de CET contra os quais a calculadora foi
+  // conferida. Se estas contas saírem do lugar, a cópia do motor divergiu
+  // do original — e aí o consultor recebe dois números para a mesma
+  // pergunta, em dois apps do mesmo autor.
+  const i = 0.18;
+
+  // Contrato A: 15x de R$ 633,49, carência 40 dias, IOF 1,714%.
+  const tA = instantes(15, 40);
+  const financiadoA = 633.49 * fatorVP(tA, i);
+  const recebidoA = financiadoA * (1 - 0.01714);
+  ok("contrato A: recebido bate com os R$ 3.000 solicitados",
+     Math.abs(recebidoA - 3000) < 1, centavos(recebidoA));
+
+  // Contrato B: 9x de R$ 260,00, carência 25 dias, IOF 1,32%, TCC 130.
+  const tB = instantes(9, 25);
+  const financiadoB = 260 * fatorVP(tB, i);
+  const recebidoB = financiadoB * (1 - 0.0132) - 130;
+  ok("contrato B: recebido bate com os R$ 1.004,90 solicitados",
+     Math.abs(recebidoB - 1004.90) < 1, centavos(recebidoB));
+
+  // E o IOF estimado tem de cair perto do que os contratos mostram.
+  ok("IOF estimado do A fica perto de 1,714%",
+     Math.abs(iofEstimado(15, 40) * 100 - 1.714) < 0.15,
+     centavos(iofEstimado(15, 40) * 100 * 100) / 100);
+  ok("IOF estimado do B fica perto de 1,32%",
+     Math.abs(iofEstimado(9, 25) * 100 - 1.32) < 0.15,
+     centavos(iofEstimado(9, 25) * 100 * 100) / 100);
+
+  // A carência não é enfeite: ignorá-la erra a parcela em vários por cento.
+  const semCarencia = 633.49 * fatorVP(instantes(15, 30), i);
+  ok("40 dias de carência mudam o financiado de verdade",
+     Math.abs(semCarencia - financiadoA) > 20, centavos(semCarencia - financiadoA));
+}
+
+// ------------------------------------------------------------------ 24
+console.log("\n24. o troco do refinanciamento");
+{
+  limpar();
+  const c = criar("11955557777", "Refi");
+  anotarRenda(c, "3000", "CREFISA");                 // teto 1800
+  salvarContrato(c, { tipo: "NOVO", prazo: 15, parcela: "600",
+                      primeiraEm: "2026-01-05", taxa: "18" });
+  const k = contratosDe(c)[0];
+
+  const ate = "2026-06-05";                           // 6 pagas, 9 faltando
+  ok("a parcela do próprio contrato volta para a margem",
+     parcelaMaximaNoRefi(c, k, ate) === 1800, parcelaMaximaNoRefi(c, k, ate));
+
+  const s = simularRefinanciamento(c, k, { ate, prazo: 18 });
+  ok("simulou sem erro", !s.erro, s.erro);
+  ok("o saldo antigo entra cheio", s.saldo === 9 * 600, s.saldo);
+  ok("o financiado é maior que o recebido", s.financiado > s.recebido);
+  ok("o troco é recebido menos saldo",
+     s.troco === centavos(s.recebido - s.saldo), s);
+
+  // A regra que decide se o consultor confia: errar sempre para menos.
+  const semTcc = simularRefinanciamento(c, k, { ate, prazo: 18, tcc: false });
+  ok("sem TCC o troco é MAIOR", semTcc.troco > s.troco, [semTcc.troco, s.troco]);
+  ok("e a diferença é exatamente a tarifa",
+     centavos(semTcc.troco - s.troco) === 130, centavos(semTcc.troco - s.troco));
+
+  // Refinanciar cedo rende pouco; esperar rende mais. É o que o app precisa
+  // saber dizer para não mandar ligar na data mínima.
+  const cedo = simularRefinanciamento(c, k, { ate: "2026-05-05", prazo: 18 });
+  const tarde = simularRefinanciamento(c, k, { ate: "2026-10-05", prazo: 18 });
+  ok("mais tarde sobra mais troco", tarde.troco > cedo.troco,
+     [cedo.troco, tarde.troco]);
+
+  // Sem taxa não inventa número.
+  salvarContrato(c, { id: k.id, tipo: k.tipo, prazo: k.prazo, parcela: k.parcela,
+                      primeiraEm: k.primeiraEm, taxa: "" });
+  const semTaxa = simularRefinanciamento(c, contratosDe(c)[0], { ate });
+  ok("sem taxa, recusa em vez de chutar", /taxa/i.test(semTaxa.erro), semTaxa.erro);
+
+  // Sem renda não há margem, e sem margem não há parcela.
+  const semRenda = criar("11955558888", "Sem renda");
+  salvarContrato(semRenda, { tipo: "NOVO", prazo: 12, parcela: "300",
+                             primeiraEm: "2026-01-05", taxa: "18" });
+  const r = simularRefinanciamento(semRenda, contratosDe(semRenda)[0], { ate });
+  ok("sem renda, recusa", /benefício|margem/i.test(r.erro), r.erro);
+}
+
+// ------------------------------------------------------------------ 25
+console.log("\n25. a carência do contrato novo sai do dia do benefício");
+{
+  const k = { prazo: 15, parcela: 600, primeiraEm: "2026-01-20", taxa: 18 };
+  // Hoje dia 5, benefício cai dia 20: faltam 15 dias.
+  ok("conta até o próximo dia do benefício",
+     diasAtePrimeira(k, "2026-09-05") === 15, diasAtePrimeira(k, "2026-09-05"));
+  // Passou do dia 20: pula para o mês seguinte.
+  ok("passado o dia, vai para o mês que vem",
+     diasAtePrimeira(k, "2026-09-21") === 29, diasAtePrimeira(k, "2026-09-21"));
+  ok("no próprio dia, também vai para o mês seguinte",
+     diasAtePrimeira(k, "2026-09-20") > 25, diasAtePrimeira(k, "2026-09-20"));
+
+  // Dia 31 em mês de 30 não pode transbordar.
+  const k31 = { prazo: 12, parcela: 100, primeiraEm: "2026-01-31", taxa: 18 };
+  ok("dia 31 não transborda de mês",
+     diasAtePrimeira(k31, "2026-11-15") <= 31, diasAtePrimeira(k31, "2026-11-15"));
 }
 
 console.log(falhas ? `\n${falhas} FALHA(S)\n` : "\ntudo passou\n");

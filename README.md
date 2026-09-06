@@ -295,12 +295,57 @@ calcula, e quando calcular vai ter nome e campo próprios.
 dez parcelas **cheias** para cobrir antes de sobrar qualquer coisa. A data de
 liberação é o mínimo permitido, não o momento em que vale a pena.
 
+### Simular o refinanciamento
+
+Na ficha, embaixo dos contratos. Já vem preenchido com o que o app sabe: o
+contrato, a taxa dele, e a parcela máxima que cabe — que inclui **a parcela do
+próprio contrato que vai ser refinanciado**, porque ela volta para a margem
+quando o contrato deixa de existir. Esquecer isso oferece bem menos do que cabe,
+e o número sai plausível.
+
+    financiado = parcela × fator de valor presente (com a carência)
+    recebido   = financiado × (1 − IOF) − tarifa
+    troco      = recebido − saldo do contrato antigo, CHEIO
+
+A carência sai do dia do benefício: um contrato assinado hoje vence no próximo
+desses dias, e isso vale vários por cento na parcela.
+
+**A matemática veio da [calculadora](https://github.com/laelson587-design/calculadora-consignado)**,
+copiada sem alteração — lá ela foi conferida ao centavo contra dois
+demonstrativos de CET reais. Está duplicada em vez de importada porque este
+projeto não tem passo de build. **Mexeu numa, mexa na outra**: dois números
+diferentes para a mesma pergunta, nos dois apps do mesmo autor, acabam com a
+confiança nos dois.
+
+### O que é estimativa, e para que lado ela erra
+
+Duas coisas o app não sabe ao certo: o **IOF**, que é estimado pelo prazo, e a
+**tarifa de cadastro**, que é botão porque ainda não se sabe se refinanciamento
+cobra (a cláusula II.6 fala em cadastro novo; refinanciamento é contrato novo).
+
+As duas erram de propósito para o lado de **prometer menos**:
+
+- Cobrei tarifa e não existia → o troco real chega **maior**. Cliente feliz.
+- Não cobrei e existia → chega **menor**. Perdeu a venda.
+
+Por isso a tarifa vem ligada. E por isso o painel diz, na própria tela, que o
+número é para **você decidir se vale a ligação** — não para prometer ao cliente.
+
+O **total a pagar** aparece junto de propósito. Consultor que diz o total na
+hora não é desmentido depois, e cliente que se sentiu enganado é o que denuncia
+e derruba o número — que é o que este app existe para evitar.
+
 ### O que ainda não faz
 
-Não estima o troco do refinanciamento. Falta a taxa (que muda de contrato para
-contrato — por isso o campo fica no contrato, e já dá para anotar) e o IOF, que
-entra no valor financiado. Enquanto a conta não fechar contra um contrato real,
-o app não chuta: número de troco errado perde a venda e a confiança.
+**Não calcula o valor de quitação com abatimento.** É outro número, e é menor
+que o do refinanciamento: quitar dá desconto dos juros futuros, refinanciar não
+dá. A conta existe na calculadora, mas depende de dois dados do contrato
+original que o Tino não guarda — a carência em dias e o IOF pago. Enquanto não
+guardar, não mostra: um número desses trocado pelo outro passa valor errado ao
+cliente.
+
+**A regra da tarifa no refinanciamento não foi confirmada.** É a única suposição
+que move mais de R$ 100 no troco. Um demonstrativo de refi resolve.
 
 ## Guardar conversas
 

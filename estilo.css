@@ -531,3 +531,35 @@ button { font: inherit; cursor: pointer; }
 
 .linha-dupla { display: flex; gap: 10px; }
 .linha-dupla .campo { flex: 1; min-width: 0; }
+
+/* --------------------------------------------- simulação do refinanciamento
+
+   O troco é o número que decide a ligação, então ele vem grande e o resto
+   vem pequeno — a conta aberta serve para conferir contra o sistema, não
+   para ser lida no meio da conversa. */
+
+.marcavel {
+  display: flex; align-items: center; gap: 10px;
+  margin: 12px 0; font-size: 15px;
+}
+.marcavel input { width: 20px; height: 20px; flex: none; accent-color: var(--marca); }
+
+.sim-resultado {
+  margin: 14px 0 4px; padding: 14px;
+  background: var(--carta); border: 1px solid var(--borda);
+  border-left: 4px solid var(--bom); border-radius: var(--raio);
+}
+.sim-resultado.nada { border-left-color: var(--atencao); }
+.sim-resultado.ruim { border-left-color: var(--ruim); }
+
+.sim-resultado .valor {
+  margin: 0; font-size: 30px; font-weight: 700; color: var(--bom);
+}
+.sim-resultado.nada .valor { font-size: 22px; color: var(--atencao); }
+.sim-resultado .detalhe { margin: 2px 0 10px; font-size: 14px; color: var(--texto); }
+.sim-resultado .conta { margin: 3px 0 0; font-size: 13px; color: var(--tenue); }
+.sim-resultado .conta.forte { color: var(--fraco); margin-top: 8px; font-weight: 600; }
+.sim-resultado .aviso {
+  margin: 10px 0 0; font-size: 13px; font-weight: 600; color: var(--atencao);
+}
+.sim-resultado.ruim .aviso { color: var(--ruim); }

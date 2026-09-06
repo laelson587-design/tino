@@ -573,6 +573,44 @@
       </div>
     </details>
 
+    <!-- Um painel só, embaixo dos contratos, em vez de um formulário dentro
+         de cada cartão: a pergunta é sempre a mesma e o que muda é qual
+         contrato. Já vem preenchido com o que o app sabe da pessoa. -->
+    <details class="bloco" id="ficha-simulador">
+      <summary>Simular refinanciamento</summary>
+      <label class="campo">
+        <span class="rotulo">Qual contrato</span>
+        <select id="sim-contrato"></select>
+      </label>
+      <div class="linha-dupla">
+        <label class="campo">
+          <span class="rotulo">Prazo novo</span>
+          <input id="sim-prazo" type="number" inputmode="numeric" min="1" max="36"
+                 value="18">
+        </label>
+        <label class="campo">
+          <span class="rotulo">Taxa ao mês (%)</span>
+          <input id="sim-taxa" type="text" inputmode="decimal" placeholder="18,00"
+                 autocomplete="off">
+        </label>
+      </div>
+      <label class="campo">
+        <span class="rotulo">Parcela nova</span>
+        <input id="sim-parcela" type="text" inputmode="decimal" placeholder="0,00"
+               autocomplete="off">
+      </label>
+      <label class="marcavel">
+        <input id="sim-tcc" type="checkbox" checked>
+        <span>Cobrar tarifa de cadastro (R$ 130)</span>
+      </label>
+      <button id="sim-calcular" class="principal" type="button">Calcular o troco</button>
+      <div id="sim-resultado" class="sim-resultado oculto"></div>
+      <p class="dica">Estimativa para você decidir se vale a ligação — não é
+         valor para prometer ao cliente. O IOF é estimado pelo prazo e a tarifa
+         é suposição: as duas erram para o lado de prometer <b>menos</b>, então o
+         sistema tende a liberar um pouco mais, nunca menos.</p>
+    </details>
+
     <h3>Retorno</h3>
     <p class="dica" id="ficha-retorno-atual"></p>
     <div class="linha-retorno">
