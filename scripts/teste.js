@@ -51,7 +51,7 @@ const {
   anotarOutrosBancos, outrosBancosDe, comprometidoDe,
   instantes, fatorVP, iofEstimado, diasAtePrimeira, parcelaMaximaNoRefi,
   simularRefinanciamento, centavos, diaDoBeneficioDe, anotarDiaDoBeneficio,
-  contratoForaDoDia,
+  contratoForaDoDia, simularContrato,
 } = ctx;
 
 let falhas = 0;
@@ -740,6 +740,82 @@ console.log("\n29. o dia do benefício entre dois aparelhos");
   apagado.diaDoBeneficioEm = new Date(Date.now() + 1000).toISOString();
   ok("apagar depois vence o valor antigo",
      mesclarContato(informado, apagado).diaDoBeneficio === 0);
+}
+
+
+// ------------------------------------------------------------------ 30
+console.log("\n30. o simulador solto, nos dois sentidos");
+{
+  // Os dois contratos reais dela: 10x e 15x de R$ 100, carência 20 dias,
+  // sem tarifa. O simulador solto tem de reproduzir os dois.
+  const a = simularContrato({ modo: "parcela", parcela: "100", prazo: 10,
+                              dias: 20, taxa: 18 });
+  const b = simularContrato({ modo: "parcela", parcela: "100", prazo: 15,
+                              dias: 20, taxa: 18 });
+  ok("reproduz o de 10x (real R$ 476)", Math.abs(a.recebido - 476) < 8, a.recebido);
+  ok("reproduz o de 15x (real R$ 538)", Math.abs(b.recebido - 538) < 9, b.recebido);
+
+  // O sentido inverso tem de voltar ao mesmo lugar.
+  const volta = simularContrato({ modo: "valor", valor: String(a.recebido),
+                                  prazo: 10, dias: 20, taxa: 18 });
+  ok("entrar pelo valor devolve a mesma parcela",
+     Math.abs(volta.parcela - 100) < 0.02, volta.parcela);
+
+  // Com tarifa, a volta também tem de fechar.
+  const comTcc = simularContrato({ modo: "parcela", parcela: "100", prazo: 10,
+                                   dias: 20, taxa: 18, tcc: true });
+  ok("a tarifa tira R$ 130 do recebido",
+     Math.abs((a.recebido - comTcc.recebido) - 130) < 0.02,
+     centavos(a.recebido - comTcc.recebido));
+  const voltaTcc = simularContrato({ modo: "valor", valor: String(comTcc.recebido),
+                                     prazo: 10, dias: 20, taxa: 18, tcc: true });
+  ok("com tarifa, ida e volta fecham", Math.abs(voltaTcc.parcela - 100) < 0.02,
+     voltaTcc.parcela);
+
+  // Recusa em vez de inventar.
+  ok("sem taxa, recusa",
+     /taxa/i.test(simularContrato({ modo: "parcela", parcela: "100", prazo: 10, dias: 20 }).erro));
+  ok("sem prazo, recusa",
+     /prazo/i.test(simularContrato({ modo: "parcela", parcela: "100", dias: 20, taxa: 18 }).erro));
+  ok("sem os dias, recusa",
+     /dias/i.test(simularContrato({ modo: "parcela", parcela: "100", prazo: 10, taxa: 18 }).erro));
+  ok("sem parcela, recusa",
+     /parcela/i.test(simularContrato({ modo: "parcela", prazo: 10, dias: 20, taxa: 18 }).erro));
+  ok("sem valor no modo valor, recusa",
+     /receber/i.test(simularContrato({ modo: "valor", prazo: 10, dias: 20, taxa: 18 }).erro));
+
+  // A carência não é enfeite nem aqui.
+  const curta = simularContrato({ modo: "parcela", parcela: "100", prazo: 15,
+                                  dias: 20, taxa: 18 });
+  const longa = simularContrato({ modo: "parcela", parcela: "100", prazo: 15,
+                                  dias: 45, taxa: 18 });
+  ok("carência maior libera menos", longa.recebido < curta.recebido,
+     [curta.recebido, longa.recebido]);
+}
+
+// ------------------------------------------------------------------ 31
+console.log("\n31. os dois simuladores usam a mesma conta");
+{
+  limpar();
+  const c = criar("11900009999", "Mesma conta");
+  anotarRenda(c, "3000", "CREFISA");
+  salvarContrato(c, { tipo: "NOVO", prazo: 15, parcela: "300",
+                      primeiraEm: "2026-01-25", taxa: "18" });
+  const k = contratosDe(c)[0];
+  const ate = "2026-09-06";
+
+  const refi = simularRefinanciamento(c, k, { ate, prazo: 18, tcc: false });
+  const solto = simularContrato({
+    modo: "parcela", parcela: String(refi.parcela), prazo: 18,
+    dias: refi.dias, taxa: 18, tcc: 0,
+  });
+
+  ok("o financiado é o mesmo nos dois", refi.financiado === solto.financiado,
+     [refi.financiado, solto.financiado]);
+  ok("o recebido é o mesmo nos dois", refi.recebido === solto.recebido,
+     [refi.recebido, solto.recebido]);
+  ok("o refi apenas desconta o saldo",
+     refi.troco === centavos(solto.recebido - refi.saldo), [refi.troco, refi.saldo]);
 }
 
 console.log(falhas ? `\n${falhas} FALHA(S)\n` : "\ntudo passou\n");

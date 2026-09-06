@@ -315,6 +315,23 @@ calcula, e quando calcular vai ter nome e campo próprios.
 dez parcelas **cheias** para cobrir antes de sobrar qualquer coisa. A data de
 liberação é o mínimo permitido, não o momento em que vale a pena.
 
+### A aba Simular
+
+Entre Contatos e Ajustes, e **não precisa de ficha nenhuma**. É a pergunta de
+quem ainda não é cliente: *"nessa parcela, quanto eu libero?"* — ou o contrário,
+*"pra ele receber tanto, qual a parcela?"*. Os dois sentidos, um toque para
+trocar.
+
+A carência sai do dia do benefício que você digitar: o app mostra a data da
+primeira parcela e quantos dias dão, porque é isso que muda a conta. A taxa fica
+guardada de uma vez para a outra, já que é sempre a mesma faixa.
+
+Isto **não substitui a [calculadora](https://laelson587-design.github.io/calculadora-consignado/)**,
+que continua de pé no endereço dela. A calculadora não guarda dado de ninguém e
+por isso pode ser mandada para qualquer pessoa; esta aba é para você trabalhar
+dentro do app que já está na mão. As duas usam a mesma conta — há teste que
+compara as duas simulações e quebra se divergirem.
+
 ### Simular o refinanciamento
 
 Na ficha, embaixo dos contratos. Já vem preenchido com o que o app sabe: o

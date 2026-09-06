@@ -71,6 +71,7 @@ const PADRAO = {
   aberturas: 0,      // quantas vezes o app abriu: mede se o navegador apaga
   desde: null,       // data da primeira abertura que sobreviveu
   ajustadoEm: null,  // última mexida nos ajustes, para a sincronia desempatar
+  taxaPadrao: 0,     // a última taxa usada no simulador solto
 };
 
 // ---------------------------------------------------------------- estado
@@ -108,6 +109,7 @@ function estruturar(d) {
     aberturas: Number(d.aberturas) || 0,
     desde: d.desde || null,
     ajustadoEm: d.ajustadoEm || null,
+    taxaPadrao: Number(d.taxaPadrao) || 0,
   };
 }
 
@@ -948,6 +950,56 @@ function parcelaMaximaNoRefi(c, contrato, ate = hoje()) {
 }
 
 /**
+ * A conta de um contrato, nos dois sentidos.
+ *
+ *   modo "parcela": você diz a parcela, ele devolve quanto o cliente recebe
+ *   modo "valor":   você diz quanto ele quer receber, ele devolve a parcela
+ *
+ *     financiado = parcela × fator de valor presente
+ *     recebido   = financiado × (1 − IOF) − tarifa
+ *
+ * É o mesmo miolo que o refinanciamento usa; lá o saldo do contrato velho
+ * é descontado do recebido, aqui não há saldo nenhum. Uma conta só nos dois
+ * lugares, para os dois nunca divergirem.
+ */
+function simularContrato(o = {}) {
+  const taxa = Number(o.taxa) / 100;
+  if (!(taxa > 0)) return { erro: "Falta a taxa ao mês." };
+
+  const prazo = Number(o.prazo);
+  if (!(prazo >= 1)) return { erro: "Falta o prazo." };
+
+  const dias = Number(o.dias);
+  if (!(dias >= 1)) return { erro: "Falta quantos dias até a primeira parcela." };
+
+  const t = instantes(prazo, dias);
+  const fator = fatorVP(t, taxa);
+  const iof = o.iof != null ? Number(o.iof) / 100 : iofEstimado(prazo, dias);
+  const tcc = o.tcc === true ? TCC_PADRAO : Number(o.tcc || 0);
+
+  let parcela, financiado, recebido;
+  if (o.modo === "valor") {
+    recebido = centavos(lerDinheiro(o.valor));
+    if (!(recebido > 0)) return { erro: "Falta o valor que o cliente quer receber." };
+    // Invertendo a conta: o que ele quer na mão, mais a tarifa, dividido
+    // pelo que sobra depois do IOF.
+    financiado = centavos((recebido + tcc) / (1 - iof));
+    parcela = centavos(financiado / fator);
+  } else {
+    parcela = centavos(lerDinheiro(o.parcela));
+    if (!(parcela > 0)) return { erro: "Falta o valor da parcela." };
+    financiado = centavos(parcela * fator);
+    recebido = centavos(financiado * (1 - iof) - tcc);
+  }
+
+  return {
+    erro: "", prazo, dias, taxa, tcc, parcela, financiado, recebido,
+    iofPct: centavos(iof * 100 * 100) / 100,
+    totalAPagar: centavos(parcela * prazo),
+  };
+}
+
+/**
  * O troco de um refinanciamento: quanto sobra para o cliente depois de o
  * contrato novo cobrir o antigo.
  *
@@ -978,24 +1030,22 @@ function simularRefinanciamento(c, contrato, opcoes = {}) {
   if (!(parcela > 0)) return { erro: "Parcela inválida." };
 
   const dias = opcoes.dias != null ? Number(opcoes.dias) : diasAtePrimeira(contrato, ate, c);
-  const t = instantes(prazo, dias);
 
-  const financiado = centavos(parcela * fatorVP(t, taxa));
-  const iof = opcoes.iof != null ? Number(opcoes.iof) / 100 : iofEstimado(prazo, dias);
-  const tcc = opcoes.tcc === false ? 0 : Number(opcoes.tcc || TCC_PADRAO);
+  const base = simularContrato({
+    modo: "parcela", parcela, prazo, dias,
+    taxa: taxa * 100,
+    iof: opcoes.iof,
+    tcc: opcoes.tcc === false ? 0 : Number(opcoes.tcc || TCC_PADRAO),
+  });
+  if (base.erro) return base;
 
-  const recebido = centavos(financiado * (1 - iof) - tcc);
   const saldo = saldoParaRefinanciar(contrato, ate);
-  const troco = centavos(recebido - saldo);
-
   return {
-    erro: "",
-    parcela, prazo, dias, taxa, tcc,
+    ...base,
+    saldo,
+    troco: centavos(base.recebido - saldo),
     passouDoTeto: parcela > teto,
     teto,
-    iofPct: centavos(iof * 100 * 100) / 100,
-    financiado, recebido, saldo, troco,
-    totalAPagar: centavos(parcela * prazo),
   };
 }
 
@@ -2082,6 +2132,79 @@ function abrirEditorDeContrato(k) {
  * aberto, a taxa daquele contrato e a parcela máxima que cabe. Quem abre
  * o painel no meio de uma ligação não tem tempo de digitar nada.
  */
+/**
+ * O simulador solto da aba Simular: sem ficha, sem cliente, sem contrato.
+ *
+ * A pergunta aqui é outra da que a ficha responde. Lá é "quanto sobra
+ * refinanciando ESTE contrato"; aqui é "quanto libera do zero", que é o que
+ * se pergunta de quem ainda não é cliente. O miolo da conta é o mesmo.
+ */
+let simuladorPorValor = false;
+
+function pintarModoDoSimulador() {
+  $("#sn-por-parcela").classList.toggle("ativo", !simuladorPorValor);
+  $("#sn-por-valor").classList.toggle("ativo", simuladorPorValor);
+  $("#sn-campo-parcela").classList.toggle("oculto", simuladorPorValor);
+  $("#sn-campo-valor").classList.toggle("oculto", !simuladorPorValor);
+  $("#sn-resultado").classList.add("oculto");
+}
+
+/** Quantos dias até a primeira parcela, a partir do dia do benefício. */
+function carenciaDoSimulador() {
+  const d = Number($("#sn-dia").value);
+  if (!(d >= 1 && d <= 31)) return null;
+  const h = hoje();
+  const ultimo = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+  let alvo = new Date(h.getFullYear(), h.getMonth(), Math.min(d, ultimo));
+  if (alvo <= h) alvo = somarMeses(alvo, 1);
+  return Math.max(1, diasEntre(h, alvo));
+}
+
+function pintarCarenciaDoSimulador() {
+  const dias = carenciaDoSimulador();
+  if (!dias) {
+    $("#sn-carencia").textContent =
+      "Informe o dia em que o benefício cai — é ele que dá a carência.";
+    return;
+  }
+  const alvo = new Date(hoje().getTime() + dias * 86400000);
+  $("#sn-carencia").textContent =
+    "Primeira parcela em " + dataCurta(alvo) + " · " + dias + " dias de carência";
+}
+
+function pintarResultadoSolto(s) {
+  const el = $("#sn-resultado");
+  el.classList.remove("oculto");
+
+  if (s.erro) {
+    el.className = "sim-resultado ruim";
+    el.innerHTML = `<p class="recado">${escapar(s.erro)}</p>`;
+    return;
+  }
+
+  el.className = "sim-resultado tem";
+  el.innerHTML =
+    `<p class="valor">${escapar(dinheiro(simuladorPorValor ? s.parcela : s.recebido))}</p>` +
+    `<p class="detalhe">${escapar(simuladorPorValor
+      ? "de parcela, em " + s.prazo + "x"
+      : "é o que ele recebe, em " + s.prazo + "x de " + dinheiro(s.parcela))}</p>` +
+    `<p class="conta">${escapar("carência de " + s.dias + " dias · taxa "
+      + centavos(s.taxa * 100).toFixed(2).replace(".", ",") + "% a.m.")}</p>` +
+    `<p class="conta">${escapar("financiado " + dinheiro(s.financiado)
+      + " · IOF " + s.iofPct.toFixed(2).replace(".", ",") + "%"
+      + (s.tcc ? " · tarifa " + dinheiro(s.tcc) : " · sem tarifa"))}</p>` +
+    `<p class="conta forte">${escapar("o cliente pagaria "
+      + dinheiro(s.totalAPagar) + " no total")}</p>`;
+}
+
+function pintarSimuladorSolto() {
+  if (estado.taxaPadrao && !$("#sn-taxa").value) {
+    $("#sn-taxa").value = paraCampo(estado.taxaPadrao);
+  }
+  pintarModoDoSimulador();
+  pintarCarenciaDoSimulador();
+}
+
 function pintarSimulador(c) {
   const abertos = contratosDe(c).filter((k) => contratoEmAberto(k));
   const painel = $("#ficha-simulador");
@@ -2117,7 +2240,7 @@ function pintarResultadoDaSimulacao(s) {
 
   if (s.erro) {
     el.className = "sim-resultado ruim";
-    el.innerHTML = `<p class="aviso">${escapar(s.erro)}</p>`;
+    el.innerHTML = `<p class="recado">${escapar(s.erro)}</p>`;
     return;
   }
 
@@ -2138,7 +2261,7 @@ function pintarResultadoDaSimulacao(s) {
     `<p class="conta forte">${escapar("o cliente pagaria "
       + dinheiro(s.totalAPagar) + " no total")}</p>` +
     (s.passouDoTeto
-      ? `<p class="aviso">${escapar("Atenção: essa parcela passa da margem, que é "
+      ? `<p class="recado">${escapar("Atenção: essa parcela passa da margem, que é "
           + dinheiro(s.teto) + ".")}</p>`
       : "");
 }
@@ -2997,6 +3120,7 @@ function irPara(tela) {
   if (tela !== "ajustes" && modeloEmEdicao) fecharEditorDeModelo();
   if (tela !== "contatos" && selecionando) sairDaSelecao();
   if (tela === "contatos") pintarContatos();
+  if (tela === "simular") pintarSimuladorSolto();
   if (tela === "ajustes") {
     pintarModelos(); pintarEstadoCopia(); pintarConta(); pintarDiagnostico();
     if (nuvemConfigurada()) {
@@ -3303,6 +3427,37 @@ function ligar() {
   $("#contrato-cancelar").addEventListener("click", () => abrirEditorDeContrato(null));
 
   formatarDinheiro("#sim-parcela");
+  formatarDinheiro("#sn-parcela");
+  formatarDinheiro("#sn-valor");
+
+  $("#sn-por-parcela").addEventListener("click", () => {
+    simuladorPorValor = false; pintarModoDoSimulador();
+  });
+  $("#sn-por-valor").addEventListener("click", () => {
+    simuladorPorValor = true; pintarModoDoSimulador();
+  });
+  $("#sn-dia").addEventListener("input", pintarCarenciaDoSimulador);
+
+  $("#sn-calcular").addEventListener("click", () => {
+    const taxa = lerDinheiro($("#sn-taxa").value);
+    const s = simularContrato({
+      modo: simuladorPorValor ? "valor" : "parcela",
+      parcela: $("#sn-parcela").value,
+      valor: $("#sn-valor").value,
+      prazo: $("#sn-prazo").value,
+      dias: carenciaDoSimulador(),
+      taxa: $("#sn-taxa").value.trim() === "" ? 0 : taxa,
+      tcc: $("#sn-tcc").checked,
+    });
+    pintarResultadoSolto(s);
+
+    // A taxa é sempre da mesma faixa: guardar poupa digitação amanhã.
+    if (!s.erro && taxa > 0 && estado.taxaPadrao !== taxa) {
+      estado.taxaPadrao = taxa;
+      ajustesMexidos();
+      guardar();
+    }
+  });
 
   $("#sim-contrato").addEventListener("change", () => {
     const c = estado.contatos[chaveFicha];

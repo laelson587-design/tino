@@ -253,6 +253,68 @@
 </section>
 
 <!-- ======================= AJUSTES ======================= -->
+<!-- O simulador solto: pessoa nova, sem ficha, você no telefone com ela.
+     A simulação de dentro da ficha responde "quanto sobra refinanciando
+     ESTE contrato"; esta aqui responde "quanto libera do zero", que é a
+     pergunta de quem ainda não é cliente. Mesma conta nos dois. -->
+<section id="tela-simular" class="tela">
+  <div class="corpo">
+    <h2>Simular</h2>
+    <p class="dica">Para quem ainda não tem ficha. Entre pela parcela que cabe
+       na margem, ou pelo valor que a pessoa quer receber.</p>
+
+    <div class="par-botoes">
+      <button id="sn-por-parcela" class="par ativo" type="button">Pela parcela</button>
+      <button id="sn-por-valor" class="par" type="button">Pelo valor</button>
+    </div>
+
+    <label class="campo" id="sn-campo-parcela">
+      <span class="rotulo">Valor da parcela</span>
+      <input id="sn-parcela" type="text" inputmode="decimal" placeholder="0,00"
+             autocomplete="off">
+    </label>
+    <label class="campo oculto" id="sn-campo-valor">
+      <span class="rotulo">Quanto ele quer receber</span>
+      <input id="sn-valor" type="text" inputmode="decimal" placeholder="0,00"
+             autocomplete="off">
+    </label>
+
+    <div class="linha-dupla">
+      <label class="campo">
+        <span class="rotulo">Prazo</span>
+        <input id="sn-prazo" type="number" inputmode="numeric" min="1" max="36"
+               value="18">
+      </label>
+      <label class="campo">
+        <span class="rotulo">Taxa ao mês (%)</span>
+        <input id="sn-taxa" type="text" inputmode="decimal" placeholder="18,00"
+               autocomplete="off">
+      </label>
+    </div>
+
+    <label class="campo">
+      <span class="rotulo">Dia do pagamento do benefício</span>
+      <input id="sn-dia" type="number" inputmode="numeric" min="1" max="31"
+             placeholder="25">
+    </label>
+    <p class="dica" id="sn-carencia"></p>
+
+    <label class="marcavel">
+      <input id="sn-tcc" type="checkbox">
+      <span>Cobrar tarifa de cadastro (R$ 130)</span>
+    </label>
+    <p class="dica">Marque só se for o <b>primeiro</b> contrato da pessoa. Quem
+       já tem cadastro não paga.</p>
+
+    <button id="sn-calcular" class="principal" type="button">Calcular</button>
+    <div id="sn-resultado" class="sim-resultado oculto"></div>
+
+    <p class="dica">A taxa fica guardada para a próxima vez, porque é sempre
+       a mesma faixa. O IOF é estimado pelo prazo e erra cerca de 1% para
+       menos — o lado seguro.</p>
+  </div>
+</section>
+
 <section id="tela-ajustes" class="tela">
   <header class="cabecalho">
     <h1>Ajustes</h1>
@@ -668,6 +730,7 @@
   <button class="aba ativa" data-tela="discar"><span>⌨</span>Discar</button>
   <button class="aba" data-tela="fila"><span>📋</span>Hoje<i id="badge-fila" class="badge oculto"></i></button>
   <button class="aba" data-tela="contatos"><span>👥</span>Contatos</button>
+  <button class="aba" data-tela="simular"><span>🧮</span>Simular</button>
   <button class="aba" data-tela="ajustes"><span>⚙</span>Ajustes</button>
 </nav>
 

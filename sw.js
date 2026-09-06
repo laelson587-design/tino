@@ -9,7 +9,7 @@
  * Suba a VERSAO quando quiser forçar a limpeza imediata de todo mundo.
  */
 
-const VERSAO = "tino-v22";
+const VERSAO = "tino-v23";
 
 const CASCA = [
   "./",

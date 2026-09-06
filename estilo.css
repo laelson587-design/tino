@@ -559,10 +559,13 @@ button { font: inherit; cursor: pointer; }
 .sim-resultado .detalhe { margin: 2px 0 10px; font-size: 14px; color: var(--texto); }
 .sim-resultado .conta { margin: 3px 0 0; font-size: 13px; color: var(--tenue); }
 .sim-resultado .conta.forte { color: var(--fraco); margin-top: 8px; font-weight: 600; }
-.sim-resultado .aviso {
+/* NÃO usar a classe .aviso aqui: ela é o balãozinho global do app, que é
+   position:fixed. Herdá-la arrancava este texto do fluxo e a caixa de erro
+   aparecia vazia — com o texto no DOM, então nenhum teste via. */
+.sim-resultado .recado {
   margin: 10px 0 0; font-size: 13px; font-weight: 600; color: var(--atencao);
 }
-.sim-resultado.ruim .aviso { color: var(--ruim); }
+.sim-resultado.ruim .recado { color: var(--ruim); }
 
 /* O aviso de contrato cuja data não cai no dia do benefício. Data errada
    desloca a liberação em um mês inteiro, então isto precisa saltar aos
@@ -571,4 +574,20 @@ button { font: inherit; cursor: pointer; }
   margin: 6px 0 0; padding: 7px 9px;
   font-size: 13px; font-weight: 600; color: var(--atencao);
   background: var(--atencao-fraco); border-radius: 8px;
+}
+
+/* Os dois sentidos da simulação: entra pela parcela ou pelo valor. Dois
+   botões grudados em vez de um seletor, porque a troca é constante e um
+   toque vale mais que dois. */
+.par-botoes { display: flex; gap: 0; margin: 14px 0 4px; }
+.par-botoes .par {
+  flex: 1; margin: 0; padding: 13px 10px;
+  font: inherit; font-size: 15px; font-weight: 600;
+  color: var(--fraco); background: var(--carta);
+  border: 1px solid var(--borda); cursor: pointer;
+}
+.par-botoes .par:first-child { border-radius: var(--raio) 0 0 var(--raio); }
+.par-botoes .par:last-child  { border-radius: 0 var(--raio) var(--raio) 0; border-left: none; }
+.par-botoes .par.ativo {
+  color: var(--sobre-cor); background: var(--marca); border-color: var(--marca);
 }
