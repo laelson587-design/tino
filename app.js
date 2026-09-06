@@ -387,6 +387,9 @@ function criar(bruto, nome, outros) {
     cpfEm: null,
     beneficio: null,
     beneficioEm: null,
+    renda: null,
+    rendaEm: null,
+    contratos: [],
     eventos: [],
   };
   const c = estado.contatos[k];
@@ -591,6 +594,335 @@ function resumoDoCliente(c) {
   return partes.join(" · ");
 }
 
+// ------------------------------------------------------------- contratos
+
+/* O contrato é a única coisa neste app que sabe a data CERTA de ligar.
+ *
+ * A régua de cadência chuta por tempo desde a última mensagem — 15 dias, 45
+ * dias. O contrato sabe por fato: refinanciamento só pode ser mexido depois
+ * de um tanto de parcelas pagas, e esse tanto é UM TERÇO DO PRAZO,
+ * ARREDONDADO PARA CIMA.
+ *
+ *     6x → 2      10-12x → 4      16-18x → 6
+ *   7-9x → 3      13-15x → 5
+ *
+ * A escada veio da Crefisa faixa por faixa; a conta foi achada depois,
+ * encaixando nos treze prazos sem uma exceção. Vale guardar como conta e não
+ * como tabela porque prazo que a Crefisa passe a fazer (20x, 24x) já cai
+ * certo sozinho, sem ninguém lembrar de vir aqui mexer.
+ */
+const PRAZO_MIN = 6;
+const PRAZO_MAX = 18;
+
+/** Quantas parcelas precisam estar pagas antes de poder refinanciar. */
+function carenciaDe(prazo) {
+  return Math.ceil(Number(prazo) / 3);
+}
+
+/* A margem é fatia da renda, e a fatia depende de onde o benefício cai: na
+   Crefisa eles controlam a conta e liberam mais. */
+const FATIA = { CREFISA: 0.60, OUTRO: 0.35 };
+
+// ---------------------------------------------------- contas de calendário
+
+function isoDia(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+}
+
+function dinheiro(v) {
+  return "R$ " + Number(v || 0).toLocaleString("pt-BR",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Lê "1.234,56", "1234.56" ou "1234" — o que a pessoa digitar no celular. */
+function lerDinheiro(bruto) {
+  const t = String(bruto == null ? "" : bruto).trim();
+  if (!t) return null;
+  const limpo = t.replace(/[^\d,.-]/g, "");
+  // Vírgula manda: onde ela existe, é ela que separa os centavos.
+  const n = limpo.includes(",")
+    ? Number(limpo.replace(/\./g, "").replace(",", "."))
+    : Number(limpo);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Meses cheios de `a` até `b`, contados pelo dia do mês. */
+function mesesEntre(a, b) {
+  const d1 = dia(a), d2 = dia(b);
+  let m = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+  if (d2.getDate() < d1.getDate()) m--;
+  return m;
+}
+
+/**
+ * Soma meses preservando o dia do vencimento. Dia 31 em mês de 30 desce para
+ * o último dia — sem isso o Date transborda para o mês seguinte e o
+ * vencimento anda sozinho, o que num contrato de 18x vira meio ano de erro.
+ */
+function somarMeses(base, n) {
+  const d = dia(base);
+  const alvo = d.getDate();
+  const r = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const ultimo = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
+  r.setDate(Math.min(alvo, ultimo));
+  return r;
+}
+
+// --------------------------------------------------------- ler o contrato
+
+/** Os contratos vivos da pessoa. O que foi removido não conta para nada. */
+function contratosDe(c) {
+  return (c && Array.isArray(c.contratos) ? c.contratos : []).filter((k) => !k.removidoEm);
+}
+
+/** Quantas parcelas já venceram. Nunca passa do prazo. */
+function parcelasPagas(k, ate = hoje()) {
+  return Math.max(0, Math.min(Number(k.prazo), mesesEntre(k.primeiraEm, ate) + 1));
+}
+
+function parcelasRestantes(k, ate = hoje()) {
+  return Math.max(0, Number(k.prazo) - parcelasPagas(k, ate));
+}
+
+/** Ainda tem parcela a vencer — é o que segura margem. */
+function contratoEmAberto(k, ate = hoje()) {
+  return parcelasRestantes(k, ate) > 0;
+}
+
+/**
+ * O dia em que dá para refinanciar: a data da parcela de número `carência`.
+ * A parcela 1 vence em `primeiraEm`, então a de número N vence N-1 meses
+ * depois — o menos um já custou um mês de erro em teste.
+ */
+function liberaContratoEm(k) {
+  return somarMeses(k.primeiraEm, carenciaDe(k.prazo) - 1);
+}
+
+function contratoLiberado(k, ate = hoje()) {
+  return liberaContratoEm(k) <= dia(ate);
+}
+
+function terminaContratoEm(k) {
+  return somarMeses(k.primeiraEm, Number(k.prazo) - 1);
+}
+
+/**
+ * Quanto sai para quitar hoje: o que falta, CHEIO.
+ *
+ * Não há dedução de juros futuros — a Crefisa refinancia sobre o débito
+ * restante inteiro. É por isso que refinanciar cedo rende troco magro: na
+ * carência de um 15x ainda faltam dez parcelas para cobrir antes de sobrar
+ * qualquer coisa para o cliente.
+ */
+function quitacaoDe(k, ate = hoje()) {
+  return parcelasRestantes(k, ate) * Number(k.parcela || 0);
+}
+
+// ----------------------------------------------------------------- margem
+
+function rendaDe(c) {
+  return { valor: 0, onde: "OUTRO", ...((c && c.renda) || {}) };
+}
+
+/** O teto de parcela que a renda aguenta. null = não se sabe a renda. */
+function tetoDe(c) {
+  const r = rendaDe(c);
+  if (!(Number(r.valor) > 0)) return null;
+  return Number(r.valor) * (FATIA[r.onde] || FATIA.OUTRO);
+}
+
+/** A soma das parcelas que ainda estão correndo. */
+function comprometidoDe(c, ate = hoje()) {
+  return contratosDe(c)
+    .filter((k) => contratoEmAberto(k, ate))
+    .reduce((s, k) => s + Number(k.parcela || 0), 0);
+}
+
+/** Quanto ainda cabe de parcela. null quando a renda não foi informada. */
+function margemDe(c, ate = hoje()) {
+  const teto = tetoDe(c);
+  if (teto === null) return null;
+  return teto - comprometidoDe(c, ate);
+}
+
+// ------------------------------------------------------- gravar contratos
+
+function novoContratoId() {
+  return "k" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/**
+ * Confere o que dá para conferir. Devolve o texto do problema em `erro`, ou
+ * "" quando está de pé, e um `aviso` à parte para o que é estranho sem ser
+ * errado.
+ *
+ * Prazo fora de 6-18 AVISA e grava assim mesmo. Recusar seria repetir o erro
+ * que o campo de benefício já ensinou: barrar a digitação faz desistir de
+ * anotar, e contrato não anotado é margem errada para sempre. Além disso a
+ * carência é conta e não tabela, então prazo novo cai certo mesmo aqui.
+ */
+function conferirContrato(d) {
+  const prazo = Number(d.prazo);
+  const parcela = lerDinheiro(d.parcela);
+  if (!prazo) return { erro: "Falta o prazo do contrato." };
+  if (prazo < 1) return { erro: "O prazo tem que ser pelo menos 1." };
+  if (!(parcela > 0)) return { erro: "Falta o valor da parcela." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.primeiraEm || ""))) {
+    return { erro: "Falta a data da primeira parcela." };
+  }
+  const aviso = prazo < PRAZO_MIN || prazo > PRAZO_MAX
+    ? "Guardei, mas " + prazo + "x está fora do que a Crefisa costuma fazer ("
+      + PRAZO_MIN + "x a " + PRAZO_MAX + "x). Confira."
+    : "";
+  return { erro: "", aviso };
+}
+
+/**
+ * Guarda ou corrige um contrato.
+ *
+ * Cada contrato carrega o PRÓPRIO carimbo porque a mesclagem resolve contrato
+ * a contrato: dois aparelhos podem ter cadastrado contratos diferentes da
+ * mesma pessoa, e aí a lista é união, não disputa. Ajuste e não evento, como
+ * o CPF e o benefício.
+ */
+function salvarContrato(c, dados) {
+  const conferido = conferirContrato(dados);
+  if (conferido.erro) return { desfecho: "invalido", recado: conferido.erro };
+  if (!Array.isArray(c.contratos)) c.contratos = [];
+
+  const taxa = lerDinheiro(dados.taxa);
+  const limpo = {
+    id: dados.id || novoContratoId(),
+    tipo: dados.tipo === "REFIN" ? "REFIN" : "NOVO",
+    prazo: Number(dados.prazo),
+    parcela: lerDinheiro(dados.parcela),
+    primeiraEm: dados.primeiraEm,
+    taxa: taxa && taxa > 0 ? taxa : null,
+    ajustadoEm: new Date().toISOString(),
+    removidoEm: null,
+  };
+
+  const i = c.contratos.findIndex((k) => k.id === limpo.id);
+  const novo = i < 0;
+  if (novo) c.contratos.push(limpo); else c.contratos[i] = limpo;
+
+  registrar(c, "CONTRATO", {
+    texto: (novo ? "Contrato " : "Contrato corrigido: ")
+      + (limpo.tipo === "REFIN" ? "refinanciamento " : "novo ")
+      + limpo.prazo + "x de " + dinheiro(limpo.parcela),
+  });
+  return { desfecho: "gravado", contrato: limpo, aviso: conferido.aviso };
+}
+
+/**
+ * Tira o contrato de circulação — por LÁPIDE, não apagando.
+ *
+ * Sem a lápide, juntar com um aparelho que ainda tem o contrato o traria de
+ * volta, e a margem passaria a contar parcela que já não existe. É o mesmo
+ * motivo que faz a mesclagem nunca deixar um lado sem o campo apagar o outro.
+ */
+function removerContrato(c, id) {
+  const k = (c.contratos || []).find((x) => x.id === id && !x.removidoEm);
+  if (!k) return false;
+  k.removidoEm = new Date().toISOString();
+  k.ajustadoEm = k.removidoEm;
+  registrar(c, "CONTRATO", { texto: "Contrato de " + k.prazo + "x removido" });
+  return true;
+}
+
+/**
+ * O caminho de quem cadastra contrato que JÁ ESTÁ ROLANDO — que vai ser a
+ * maioria, porque a carteira existe antes do app.
+ *
+ * Em vez da data da primeira parcela, que ninguém tem de cabeça, ele diz
+ * quantas já foram pagas e em que dia do mês cai o desconto. Vira
+ * `primeiraEm` na hora e some: guardar "pagas" seria guardar um número que
+ * envelhece sozinho e obrigaria a voltar no sistema toda vez para conferir.
+ */
+function primeiraPorPagas(pagas, diaDoMes, ate = hoje()) {
+  const n = Math.max(1, Number(pagas) || 1);
+  const h = dia(ate);
+  const d = Number(diaDoMes) || h.getDate();
+
+  const ultimoDoMes = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+  let ultima = new Date(h.getFullYear(), h.getMonth(), Math.min(d, ultimoDoMes));
+  if (ultima > h) ultima = somarMeses(ultima, -1);   // a deste mês ainda não caiu
+
+  return isoDia(somarMeses(ultima, -(n - 1)));
+}
+
+/**
+ * O que os contratos têm a dizer sobre chamar esta pessoa HOJE.
+ *
+ * A trava não é o contrato: é a MARGEM. Contrato novo não tem prazo nenhum
+ * para ser feito, então quem tem margem sobrando sempre tem conversa, mesmo
+ * com todo refinanciamento travado. Fica de fora só quem está com a margem no
+ * talo E sem nenhum contrato liberado — aí não existe o que oferecer, e a
+ * mensagem só gasta o chip.
+ *
+ * Devolve null para quem não tem contrato: aí quem manda é a régua, como
+ * sempre foi.
+ */
+function situacaoDosContratos(c, ate = hoje()) {
+  const abertos = contratosDe(c).filter((k) => contratoEmAberto(k, ate));
+  if (!abertos.length) return null;
+
+  const margem = margemDe(c, ate);
+  const porData = abertos.slice().sort((a, b) => liberaContratoEm(a) - liberaContratoEm(b));
+  const liberados = porData.filter((k) => contratoLiberado(k, ate));
+
+  if (liberados.length) {
+    const k = liberados[0];
+    return {
+      estado: "LIBERADO", contrato: k, margem,
+      motivo: "contrato de " + k.prazo + "x liberou · "
+        + parcelasPagas(k, ate) + " de " + k.prazo + " pagas",
+    };
+  }
+
+  const proximo = porData[0];
+  const quando = liberaContratoEm(proximo);
+  if (margem !== null && margem > 0) {
+    return {
+      estado: "SO_MARGEM", contrato: proximo, margem, quando,
+      motivo: "refinanciamento só em " + dataCurta(quando)
+        + ", mas ainda cabe " + dinheiro(margem) + " de parcela",
+    };
+  }
+  return {
+    estado: "TRAVADO", contrato: proximo, margem, quando,
+    motivo: "contrato de " + proximo.prazo + "x libera em " + dataCurta(quando),
+  };
+}
+
+/**
+ * Guarda a renda. Ajuste com carimbo próprio, como o CPF e o benefício: o
+ * valor do benefício muda no reajuste todo ano, e sem carimbo o aparelho que
+ * ficou parado apagaria o valor novo do outro.
+ */
+function anotarRenda(c, bruto, onde) {
+  const valor = lerDinheiro(bruto);
+  const antes = rendaDe(c);
+  const destino = onde === "CREFISA" ? "CREFISA" : "OUTRO";
+
+  if (!valor || valor <= 0) {
+    if (!antes.valor && destino === antes.onde) return "igual";
+    c.renda = destino === "OUTRO" ? null : { valor: 0, onde: destino };
+    c.rendaEm = new Date().toISOString();
+    return "apagado";
+  }
+  if (antes.valor === valor && antes.onde === destino) return "igual";
+
+  c.renda = { valor, onde: destino };
+  c.rendaEm = new Date().toISOString();
+  registrar(c, "RENDA", {
+    texto: "Renda " + dinheiro(valor)
+      + (destino === "CREFISA" ? " · recebe na Crefisa (60%)" : " · outro banco (35%)"),
+  });
+  return "gravado";
+}
+
 function registrar(c, tipo, extra = {}) {
   c.eventos.push({ em: new Date().toISOString(), tipo, ...extra });
 }
@@ -749,8 +1081,9 @@ function pintarDiscagem() {
 
   if (!ok) {
     chaveAtual = null;
-    ["#quem", "#veredito", "#campo-nome", "#campo-beneficio", "#campo-modelo", "#campo-previa",
-      "#abrir", "#so-guardar", "#desfecho", "#agendar", "#ver-ficha"]
+    ["#quem", "#veredito", "#margem-linha", "#campo-nome", "#campo-beneficio",
+      "#campo-modelo", "#campo-previa", "#abrir", "#so-guardar", "#desfecho",
+      "#agendar", "#ver-ficha"]
       .forEach((s) => mostrar(s, false));
     return;
   }
@@ -795,6 +1128,7 @@ function pintarDiscagem() {
   }
 
   pintarQuem(c, bruto);
+  pintarLinhaDaMargem(c);
   mostrar("#quem", true);
   mostrar("#veredito", true);
   mostrar("#campo-nome", true);
@@ -1083,10 +1417,36 @@ function montarFila() {
       continue;
     }
 
+    /* O contrato entra depois do retorno combinado e antes da régua: ele
+       sabe por fato o que a régua chuta por tempo. Travado SEGURA a pessoa
+       fora da fila — mandar mensagem para quem não pode fechar nem tem margem
+       é gastar o chip à toa, que é o que este app existe para evitar. */
+    const ct = situacaoDosContratos(c, h);
+    if (ct && ct.estado === "TRAVADO") {
+      const faltam = diasEntre(h, ct.quando);
+      if (faltam > 0 && faltam <= DIAS_DE_ANTECEDENCIA) {
+        linhas.push({
+          k, c, ordem: 3, chegando: true,
+          motivo: ct.motivo + " · " + (faltam === 1 ? "amanhã" : "em " + faltam + " dias"),
+        });
+      }
+      continue;
+    }
+
     const lib = liberadoEm(c);
     if (!lib || lib > h) continue;
 
     const ult = ultimoEnvio(c);
+
+    /* Contrato liberado é o motivo mais forte que a fila tem, então sobe quase
+       ao topo — mas NÃO atropela a régua acima: se ela mandou esperar, espera.
+       Três mensagens sem resposta continuam valendo mais que uma oportunidade,
+       porque o chip é um só e a oportunidade volta no mês seguinte. */
+    if (ct && ct.estado === "LIBERADO") {
+      linhas.push({ k, c, ordem: 0.5, motivo: ct.motivo, peso: ult ? dia(ult).getTime() : 0 });
+      continue;
+    }
+
     if (!ult) {
       linhas.push({ k, c, ordem: 2, motivo: "cadastrado e nunca chamado" });
     } else {
@@ -1336,6 +1696,8 @@ const ROTULO_EVENTO = {
   BENEFICIO: "Dados do benefício",
   CPF: "CPF anotado",
   NUMERO: "Número",
+  CONTRATO: "Contrato",
+  RENDA: "Renda anotada",
 };
 
 /**
@@ -1352,6 +1714,133 @@ function pintarNumerosDaFicha(c) {
         : `<button class="mini" data-principal="${escapar(n)}">tornar principal</button>
            <button class="mini apagar" data-tirar-numero="${escapar(n)}">remover</button>`}
     </div>`).join("");
+}
+
+// ------------------------------------------------- contratos, na tela
+
+let contratoEmEdicao = null;   // id do contrato aberto no editor da ficha
+
+/** O cartão da margem: o teto, o que já está preso e o que sobra. */
+function pintarMargem(c) {
+  const el = $("#ficha-margem");
+  const teto = tetoDe(c);
+  if (teto === null) {
+    el.classList.add("oculto");
+    return;
+  }
+  const preso = comprometidoDe(c);
+  const sobra = teto - preso;
+  const r = rendaDe(c);
+
+  el.classList.remove("oculto");
+  el.className = "margem-cartao " + (sobra > 0 ? "tem" : "cheia");
+  el.innerHTML =
+    `<p class="valor">${escapar(dinheiro(Math.max(0, sobra)))}</p>` +
+    `<p class="detalhe">${escapar(
+      sobra > 0 ? "ainda cabe de parcela" : "margem no talo")}</p>` +
+    `<p class="conta">${escapar(
+      dinheiro(teto) + " de teto (" + (r.onde === "CREFISA" ? "60%" : "35%")
+      + " de " + dinheiro(r.valor) + ") menos " + dinheiro(preso) + " já comprometidos")}</p>`;
+}
+
+/**
+ * A lista de contratos da pessoa. Cada um diz onde está, quando libera e
+ * quanto sai para quitar — que é o número que decide se vale a ligação, e não
+ * só se ela é permitida.
+ */
+function pintarListaDeContratos(c) {
+  const lista = contratosDe(c)
+    .slice()
+    .sort((a, b) => dia(a.primeiraEm) - dia(b.primeiraEm));
+  const el = $("#ficha-contratos");
+
+  if (!lista.length) {
+    el.innerHTML = `<p class="vazio">Nenhum contrato cadastrado.</p>`;
+    return;
+  }
+
+  el.innerHTML = lista.map((k) => {
+    const pagas = parcelasPagas(k);
+    const faltam = parcelasRestantes(k);
+    const aberto = faltam > 0;
+    const liberado = contratoLiberado(k);
+    const quando = liberaContratoEm(k);
+
+    const situacao = !aberto
+      ? { classe: "fim", texto: "Quitado em " + dataCurta(terminaContratoEm(k)) }
+      : liberado
+        ? { classe: "livre", texto: "Liberado para refinanciar" }
+        : { classe: "preso", texto: "Libera em " + dataCurta(quando)
+            + " · na " + carenciaDe(k.prazo) + "ª parcela" };
+
+    return `<div class="contrato ${situacao.classe}">
+      <div class="topo">
+        <span class="tipo">${k.tipo === "REFIN" ? "Refinanciamento" : "Novo"}</span>
+        <span class="prazo">${k.prazo}x de ${escapar(dinheiro(k.parcela))}</span>
+      </div>
+      <div class="barra"><i style="width:${Math.round((pagas / k.prazo) * 100)}%"></i></div>
+      <p class="andamento">${pagas} de ${k.prazo} pagas${
+        aberto ? " · faltam " + faltam : ""}</p>
+      <p class="situacao">${escapar(situacao.texto)}</p>
+      ${aberto ? `<p class="quitacao">Quitar hoje: ${escapar(dinheiro(quitacaoDe(k)))}</p>` : ""}
+      <div class="acoes">
+        <button class="secundario" data-editar-contrato="${escapar(k.id)}">Corrigir</button>
+        <button class="secundario" data-tirar-contrato="${escapar(k.id)}">Remover</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/** Põe o editor no estado de cadastrar (id vazio) ou de corrigir um existente. */
+function abrirEditorDeContrato(k) {
+  contratoEmEdicao = k ? k.id : null;
+  $("#contrato-tipo").value = k ? k.tipo : "NOVO";
+  $("#contrato-prazo").value = k ? k.prazo : "";
+  $("#contrato-parcela").value = k ? String(k.parcela).replace(".", ",") : "";
+  $("#contrato-primeira").value = k ? k.primeiraEm : "";
+  $("#contrato-taxa").value = k && k.taxa ? String(k.taxa).replace(".", ",") : "";
+  $("#contrato-pagas").value = "";
+  $("#contrato-dia").value = "";
+  $("#ficha-contrato-titulo").textContent = k ? "Corrigir contrato" : "Cadastrar contrato";
+  $("#contrato-salvar").textContent = k ? "Guardar correção" : "Guardar contrato";
+  $("#contrato-cancelar").classList.toggle("oculto", !k);
+  $("#ficha-contrato-editor").open = !!k;
+}
+
+function pintarBlocoDeContratos(c) {
+  pintarMargem(c);
+  pintarListaDeContratos(c);
+}
+
+/**
+ * A linha da margem na tela de Discar. Uma linha, sem botão: o que ela diz é
+ * se vale gastar a mensagem, e isso se lê de relance.
+ */
+function pintarLinhaDaMargem(c) {
+  const el = $("#margem-linha");
+  if (!c) {
+    el.classList.add("oculto");
+    return;
+  }
+  const ct = situacaoDosContratos(c);
+  const margem = margemDe(c);
+  if (!ct && margem === null) {
+    el.classList.add("oculto");
+    return;
+  }
+
+  const partes = [];
+  if (ct) partes.push(ct.motivo);
+  else if (margem !== null) {
+    partes.push(margem > 0
+      ? "cabe " + dinheiro(margem) + " de parcela"
+      : "margem no talo");
+  }
+
+  el.className = "margem-linha "
+    + (ct && ct.estado === "TRAVADO" ? "preso" : ct && ct.estado === "LIBERADO" ? "livre" : "");
+  el.textContent = partes.join(" · ");
+  el.classList.remove("oculto");
 }
 
 function abrirFicha(k) {
@@ -1372,6 +1861,12 @@ function abrirFicha(k) {
   const resumo = resumoDoCliente(c);
   $("#ficha-beneficio-resumo").textContent = resumo;
   $("#ficha-beneficio-resumo").classList.toggle("oculto", !resumo);
+
+  const r = rendaDe(c);
+  $("#ficha-renda-valor").value = r.valor ? String(r.valor).replace(".", ",") : "";
+  $("#ficha-renda-onde").value = r.onde;
+  pintarBlocoDeContratos(c);
+  abrirEditorDeContrato(null);
 
   $("#ficha-nota").value = "";
   $("#ficha-conversa").value = "";
@@ -2385,6 +2880,87 @@ function ligar() {
   };
   $("#ficha-beneficio-numero").addEventListener("change", salvarBeneficioDaFicha);
   $("#ficha-beneficio-tipo").addEventListener("change", salvarBeneficioDaFicha);
+
+  // ------------------------------------------------ renda e contratos
+
+  const salvarRendaDaFicha = () => {
+    const c = estado.contatos[chaveFicha];
+    if (!c) return;
+    const desfecho = anotarRenda(c, $("#ficha-renda-valor").value, $("#ficha-renda-onde").value);
+    if (desfecho === "igual") return;
+    guardar();
+    abrirFicha(chaveFicha);
+    avisar(desfecho === "apagado" ? "Renda apagada." : "Renda anotada.");
+  };
+  // Formata ao sair do campo, como o número do benefício já fazia: dinheiro
+  // sem separador vira erro de leitura na hora de conferir com o sistema.
+  const formatarDinheiro = (sel) => $(sel).addEventListener("blur", () => {
+    const v = lerDinheiro($(sel).value);
+    $(sel).value = v === null ? "" : v.toFixed(2).replace(".", ",");
+  });
+  formatarDinheiro("#ficha-renda-valor");
+  formatarDinheiro("#contrato-parcela");
+
+  $("#ficha-renda-valor").addEventListener("change", salvarRendaDaFicha);
+  $("#ficha-renda-onde").addEventListener("change", salvarRendaDaFicha);
+
+  // Converte "já pagou N, cai dia D" na data da primeira parcela e escreve no
+  // campo de data. Não guarda nada por fora: o que fica é a data.
+  $("#contrato-calcular").addEventListener("click", () => {
+    const pagas = Number($("#contrato-pagas").value);
+    if (!(pagas >= 1)) return avisar("Diga quantas parcelas já foram pagas.");
+    const d = Number($("#contrato-dia").value);
+    if (d && (d < 1 || d > 31)) return avisar("O dia do desconto vai de 1 a 31.");
+    $("#contrato-primeira").value = primeiraPorPagas(pagas, d);
+    avisar("Primeira parcela em " + dataCurta($("#contrato-primeira").value) + ".");
+  });
+
+  $("#contrato-salvar").addEventListener("click", () => {
+    const c = estado.contatos[chaveFicha];
+    if (!c) return;
+    const r = salvarContrato(c, {
+      id: contratoEmEdicao,
+      tipo: $("#contrato-tipo").value,
+      prazo: $("#contrato-prazo").value,
+      parcela: $("#contrato-parcela").value,
+      primeiraEm: $("#contrato-primeira").value,
+      taxa: $("#contrato-taxa").value,
+    });
+    if (r.desfecho === "invalido") return avisar(r.recado);
+
+    guardar();
+    const corrigido = !!contratoEmEdicao;
+    abrirFicha(chaveFicha);
+    // O aviso de problema tem prioridade sobre o de confirmação — foi a lição
+    // que o CPF deixou, quando o "guardado" engolia o "esse CPF não confere".
+    avisar(r.aviso || (corrigido ? "Contrato corrigido." : "Contrato guardado."));
+  });
+
+  $("#contrato-cancelar").addEventListener("click", () => abrirEditorDeContrato(null));
+
+  $("#ficha-contratos").addEventListener("click", (ev) => {
+    const c = estado.contatos[chaveFicha];
+    if (!c) return;
+
+    const corrigir = ev.target.closest("[data-editar-contrato]");
+    if (corrigir) {
+      const k = contratosDe(c).find((x) => x.id === corrigir.dataset.editarContrato);
+      if (k) abrirEditorDeContrato(k);
+      return;
+    }
+
+    const tirar = ev.target.closest("[data-tirar-contrato]");
+    if (tirar) {
+      const k = contratosDe(c).find((x) => x.id === tirar.dataset.tirarContrato);
+      if (!k) return;
+      if (!confirm(`Remover o contrato de ${k.prazo}x de ${dinheiro(k.parcela)}?`
+        + "\n\nA margem volta a contar sem ele.")) return;
+      removerContrato(c, k.id);
+      guardar();
+      abrirFicha(chaveFicha);
+      avisar("Contrato removido.");
+    }
+  });
 
   $("#exportar-conversa").addEventListener("click", exportarConversa);
 

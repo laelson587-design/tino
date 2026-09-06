@@ -122,6 +122,10 @@
     <!-- O veredito. É o coração do app: aparece ANTES de mandar, não depois. -->
     <div id="veredito" class="veredito oculto"></div>
 
+    <!-- Uma linha, sem botão. A lição do montador vale aqui: o que acrescenta
+         toque na tela de Discar é recusado no uso. Isto só informa. -->
+    <p id="margem-linha" class="margem-linha oculto"></p>
+
     <label class="campo oculto" id="campo-nome">
       <span class="rotulo">Nome de quem atende</span>
       <input id="nome" type="text" placeholder="Sr. José" autocomplete="off">
@@ -478,6 +482,88 @@
       <span class="rotulo">Tipo de benefício</span>
       <select id="ficha-beneficio-tipo"></select>
     </label>
+
+    <h3>Renda e margem</h3>
+    <p class="dica">É o valor do benefício que decide quanto de parcela cabe:
+       60% para quem recebe na Crefisa, 35% para quem recebe em outro banco.</p>
+    <div id="ficha-margem" class="margem-cartao oculto"></div>
+    <label class="campo">
+      <span class="rotulo">Valor do benefício</span>
+      <input id="ficha-renda-valor" type="text" inputmode="decimal"
+             placeholder="0,00" autocomplete="off">
+    </label>
+    <label class="campo">
+      <span class="rotulo">Onde recebe</span>
+      <select id="ficha-renda-onde">
+        <option value="OUTRO">Outro banco — até 35%</option>
+        <option value="CREFISA">Crefisa — até 60%</option>
+      </select>
+    </label>
+
+    <h3>Contratos</h3>
+    <div id="ficha-contratos" class="contratos"></div>
+    <details class="bloco" id="ficha-contrato-editor">
+      <summary id="ficha-contrato-titulo">Cadastrar contrato</summary>
+      <label class="campo">
+        <span class="rotulo">Tipo</span>
+        <select id="contrato-tipo">
+          <option value="NOVO">Novo</option>
+          <option value="REFIN">Refinanciamento</option>
+        </select>
+      </label>
+      <div class="linha-dupla">
+        <label class="campo">
+          <span class="rotulo">Prazo (parcelas)</span>
+          <input id="contrato-prazo" type="number" inputmode="numeric"
+                 min="1" max="36" placeholder="15">
+        </label>
+        <label class="campo">
+          <span class="rotulo">Valor da parcela</span>
+          <input id="contrato-parcela" type="text" inputmode="decimal"
+                 placeholder="0,00" autocomplete="off">
+        </label>
+      </div>
+      <label class="campo">
+        <span class="rotulo">Data da 1ª parcela</span>
+        <input id="contrato-primeira" type="date">
+      </label>
+
+      <!-- O caminho de quem cadastra contrato que já está rolando, que vai ser
+           a maioria: ninguém tem a data da primeira parcela de cabeça, mas
+           todo mundo lê "6 de 15" na tela do sistema. Isto vira a data e some;
+           não fica guardado nada que envelheça sozinho. -->
+      <details class="bloco">
+        <summary>Não sei a data — sei quantas já pagou</summary>
+        <div class="linha-dupla">
+          <label class="campo">
+            <span class="rotulo">Parcelas já pagas</span>
+            <input id="contrato-pagas" type="number" inputmode="numeric"
+                   min="1" max="36" placeholder="6">
+          </label>
+          <label class="campo">
+            <span class="rotulo">Dia do desconto</span>
+            <input id="contrato-dia" type="number" inputmode="numeric"
+                   min="1" max="31" placeholder="5">
+          </label>
+        </div>
+        <button id="contrato-calcular" class="secundario" type="button">Calcular a data</button>
+        <p class="dica">O desconto cai no dia em que o benefício é pago.</p>
+      </details>
+
+      <label class="campo">
+        <span class="rotulo">Taxa ao mês (%) — opcional</span>
+        <input id="contrato-taxa" type="text" inputmode="decimal"
+               placeholder="0,00" autocomplete="off">
+      </label>
+      <p class="dica">A taxa muda de contrato para contrato, por isso fica aqui
+         e não nos Ajustes. Ela ainda não é usada em conta nenhuma — vai servir
+         para estimar o troco do refinanciamento.</p>
+
+      <div class="linha-retorno">
+        <button id="contrato-salvar" class="principal" type="button">Guardar contrato</button>
+        <button id="contrato-cancelar" class="secundario oculto" type="button">Cancelar</button>
+      </div>
+    </details>
 
     <h3>Retorno</h3>
     <p class="dica" id="ficha-retorno-atual"></p>

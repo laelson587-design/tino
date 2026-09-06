@@ -461,3 +461,73 @@ button { font: inherit; cursor: pointer; }
   padding: 1px 5px; border-radius: 5px;
 }
 .rodape { margin: 32px 0 8px; text-align: center; font-size: 12px; color: var(--tenue); }
+
+/* ------------------------------------------------------------ contratos
+
+   A margem e o andamento das parcelas são números que se leem de relance,
+   entre uma ligação e outra. Por isso o valor grande e o resto pequeno: o
+   que decide se vale a mensagem é quanto ainda cabe, não a conta que levou
+   até ele. */
+
+.margem-linha {
+  margin: 8px 0 0; padding: 9px 12px;
+  font-size: 14px; color: var(--fraco);
+  background: var(--carta); border: 1px solid var(--borda);
+  border-left: 4px solid var(--borda); border-radius: var(--raio);
+}
+.margem-linha.livre { border-left-color: var(--bom); color: var(--bom); background: var(--bom-fraco); }
+.margem-linha.preso { border-left-color: var(--atencao); color: var(--atencao); background: var(--atencao-fraco); }
+
+.margem-cartao {
+  margin: 10px 0; padding: 14px;
+  background: var(--carta); border: 1px solid var(--borda);
+  border-left: 4px solid var(--bom); border-radius: var(--raio);
+}
+.margem-cartao.cheia { border-left-color: var(--atencao); }
+.margem-cartao .valor {
+  margin: 0; font-size: 26px; font-weight: 700; color: var(--bom);
+}
+.margem-cartao.cheia .valor { color: var(--atencao); }
+.margem-cartao .detalhe { margin: 2px 0 0; font-size: 14px; color: var(--texto); }
+.margem-cartao .conta { margin: 8px 0 0; font-size: 13px; color: var(--tenue); }
+
+.contratos { margin: 10px 0; }
+.contratos .vazio { font-size: 14px; color: var(--tenue); margin: 8px 0; }
+
+.contrato {
+  padding: 13px 14px; margin-bottom: 10px;
+  background: var(--carta); border: 1px solid var(--borda);
+  border-left: 4px solid var(--borda); border-radius: var(--raio);
+}
+.contrato.livre { border-left-color: var(--bom); }
+.contrato.preso { border-left-color: var(--atencao); }
+.contrato.fim   { border-left-color: var(--tenue); opacity: 0.72; }
+
+.contrato .topo {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px; flex-wrap: wrap;
+}
+.contrato .tipo { font-size: 13px; color: var(--tenue); text-transform: uppercase; letter-spacing: 0.4px; }
+.contrato .prazo { font-size: 16px; font-weight: 700; }
+
+/* A barra é o único jeito de ver "falta pouco" sem ler número nenhum. */
+.contrato .barra {
+  height: 6px; margin: 9px 0 7px; border-radius: 3px;
+  background: var(--fundo); overflow: hidden;
+}
+.contrato .barra i { display: block; height: 100%; background: var(--tenue); }
+.contrato.livre .barra i { background: var(--bom); }
+.contrato.preso .barra i { background: var(--atencao); }
+
+.contrato .andamento { margin: 0; font-size: 13px; color: var(--tenue); }
+.contrato .situacao { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
+.contrato.livre .situacao { color: var(--bom); }
+.contrato.preso .situacao { color: var(--atencao); }
+.contrato.fim   .situacao { color: var(--tenue); }
+.contrato .quitacao { margin: 4px 0 0; font-size: 13px; color: var(--fraco); }
+
+.contrato .acoes { display: flex; gap: 8px; margin-top: 10px; }
+.contrato .acoes .secundario { margin-top: 0; width: auto; flex: 1; padding: 9px 10px; font-size: 14px; }
+
+.linha-dupla { display: flex; gap: 10px; }
+.linha-dupla .campo { flex: 1; min-width: 0; }

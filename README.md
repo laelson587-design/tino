@@ -121,8 +121,14 @@ certo ainda acha alguém na busca — número nenhum não acha.
 
 Com CPF e benefício, o arquivo que você manda para o Drive ou para o e-mail
 passa a **identificar a pessoa por inteiro**. O mesmo vale para a conversa
-exportada, que leva o CPF no cabeçalho. Guarde esses arquivos como você
-guardaria a lista impressa.
+exportada, que leva o CPF no cabeçalho.
+
+Com renda e contratos, ele deixa de ser identificação e vira **ficha
+financeira**: quanto a pessoa recebe, quanto já deve e até quando. Por isso o
+app guarda só o que as duas contas precisam — prazo, parcela, data e taxa — e
+**não guarda número do contrato, valor liberado nem troco**. Menos dado no
+arquivo, mesma função. Guarde esses arquivos como você guardaria a lista
+impressa.
 
 ## A tela antes de digitar
 
@@ -198,6 +204,83 @@ para hoje. Quando a data chega, ela sobe para o topo. Marcar retorno também tir
 "sem interesse", porque marcar data é o contrário de descartar. Dá para
 agendar quem você ainda nem chamou: às vezes o combinado é só "me procura
 depois do dia 10".
+
+## Contratos e margem
+
+A régua chuta por tempo. O contrato sabe por fato — e é a primeira coisa neste
+app que diz a data **certa** de ligar em vez de um prazo redondo.
+
+Um refinanciamento só pode ser mexido depois de um tanto de parcelas pagas, e
+esse tanto é **um terço do prazo, arredondado para cima**:
+
+| Prazo | Parcelas pagas antes de poder refinanciar |
+| --- | --- |
+| 6x | 2 |
+| 7x a 9x | 3 |
+| 10x a 12x | 4 |
+| 13x a 15x | 5 |
+| 16x a 18x | 6 |
+
+A escada veio faixa por faixa; a conta foi achada encaixando nos treze prazos,
+sem exceção. Está no código como conta e não como tabela, para que prazo novo
+(20x, 24x) caia certo sem ninguém lembrar de vir aqui mexer.
+
+### O que isso muda na fila
+
+Não é só aviso. **Contrato travado segura a pessoa fora da fila** — mandar
+mensagem para quem não pode fechar é gastar o chip à toa, que é o motivo de o
+app existir. Quando libera, a pessoa sobe quase ao topo, com o motivo escrito:
+*"contrato de 15x liberou · 5 de 15 pagas"*.
+
+Duas regras que não devem ser afrouxadas:
+
+- **A trava é a margem, não o contrato.** Contrato novo não tem prazo nenhum
+  para ser feito. Então quem tem margem sobrando continua na fila mesmo com
+  todo refinanciamento travado — há o que oferecer. Some da fila só quem está
+  com a margem no talo **e** sem nenhum contrato liberado.
+- **A régua continua acima.** Contrato liberado sobe na ordem, mas não atropela
+  quem já ouviu três mensagens sem responder. O chip é um só, e a oportunidade
+  volta no mês que vem.
+
+### A margem
+
+Quanto de parcela ainda cabe: uma fatia da renda, menos o que os contratos em
+aberto já prendem. A fatia depende de onde o benefício cai — **60% para quem
+recebe na Crefisa, 35% para quem recebe em outro banco**. Contrato que termina
+devolve a parcela para a margem sozinho, sem ninguém dar baixa.
+
+Na tela de Discar isso é **uma linha, sem botão**. Na ficha é um cartão com a
+conta aberta, para conferir contra o sistema.
+
+### Cadastrar um contrato
+
+Na ficha da pessoa. Precisa de quatro coisas: tipo, prazo, valor da parcela e
+a data da primeira parcela — que sai pronta na tela do sistema quando o
+contrato é gerado, no dia em que o benefício é pago.
+
+Para contrato que **já está rolando**, que é a maioria, tem o caminho de baixo:
+*"não sei a data — sei quantas já pagou"*. Você diz quantas parcelas foram
+pagas e em que dia cai o desconto, e o app calcula a data da primeira. O que
+fica guardado é só a data: guardar "6 pagas" seria guardar um número que
+envelhece sozinho e obrigaria a voltar no sistema toda vez.
+
+Prazo fora de 6x–18x **avisa mas guarda**. Barrar a digitação faz desistir de
+anotar, e contrato não anotado é margem errada para sempre.
+
+### Quitar hoje
+
+Cada contrato mostra quanto sai para liquidá-lo: **o que falta, cheio**. Não há
+dedução de juros futuros — o refinanciamento é sobre o débito restante inteiro.
+É por isso que refinanciar na carência rende troco magro: no 15x ainda faltam
+dez parcelas para cobrir antes de sobrar qualquer coisa. A data de liberação é
+o mínimo permitido, não o momento em que vale a pena.
+
+### O que ainda não faz
+
+Não estima o troco do refinanciamento. Falta a taxa (que muda de contrato para
+contrato — por isso o campo fica no contrato, e já dá para anotar) e o IOF, que
+entra no valor financiado. Enquanto a conta não fechar contra um contrato real,
+o app não chuta: número de troco errado perde a venda e a confiança.
 
 ## Guardar conversas
 
@@ -280,7 +363,9 @@ node scripts/teste.js
 Não instala nada e não abre navegador: carrega o `app.js` num contexto de
 mentira e pergunta quem é quem depois de mexer nos números — achar pelo segundo
 telefone, trocar o principal, juntar duas fichas, mesclar dois aparelhos, ler
-contato guardado antes do campo existir.
+contato guardado antes do campo existir. Confere também as contas de contrato:
+a carência de cada prazo, o vencimento no dia 31, a margem, e quem a fila
+segura.
 
 É a única parte do app onde um defeito não aparece na tela. Se ele confunde
 duas pessoas, a mensagem sai para quem pediu para parar e nada parece errado.

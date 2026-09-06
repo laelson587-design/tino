@@ -4,87 +4,7 @@
  * confunde duas pessoas, a mensagem sai para quem pediu para parar e ninguém
  * vê nada errado acontecendo. Dois defeitos assim já saíram daqui.
  *
- * Roda com 
-1. dois números na mesma ficha
-  ok   nasce com um número
-  ok   guardou o fixo
-  ok   agora são dois
-  ok   acha pelo principal
-  ok   acha pelo fixo
-  ok   acha pelo celular sem o nono
-  ok   não acha um estranho
-  ok   a chave do fixo aponta para a ficha
-  ok   repetido não entra duas vezes
-  ok   número quebrado é recusado
-
-2. para qual número a conversa abre
-  ok   digitou o fixo, fala no fixo
-  ok   digitou o celular, fala no celular
-  ok   digitou sem o nono, fala na forma guardada
-
-3. trocar o principal sem mudar a chave
-  ok   trocou
-  ok   o principal é o fixo
-  ok   o celular continua na ficha
-  ok   a chave NÃO mudou
-  ok   continua achando pelos dois
-  ok   o principal não pode ser removido
-  ok   o outro pode
-  ok   sobrou um
-  ok   quem saiu não acha mais
-
-4. número que já é de outra pessoa
-  ok   recusa e diz de quem é
-  ok   aponta a ficha certa
-  ok   não guardou em dobro
-
-5. juntar as duas fichas
-  ok   sobrou uma ficha só
-  ok   ficou na chave de quem estava aberto
-  ok   os dois números estão nela
-  ok   o principal é o de quem juntou
-  ok   nenhum evento se perdeu
-  ok   a situação foi refeita pelos eventos
-  ok   acha pelos dois números depois de juntar
-
-6. sincronia entre dois aparelhos
-  ok   junta os três números
-  ok   nenhum número se perdeu
-  ok   dá no mesmo na ordem trocada
-  ok   o principal é o de quem mexeu por último
-
-7. contato guardado antes desta versão
-  ok   lê sem quebrar
-  ok   continua sendo achado
-  ok   aceita um segundo número
-  ok   agora tem dois
-  ok   mescla com um lado sem o campo
-
-8. a agenda do celular não perde telefone
-  ok   pegou o nome
-  ok   o primeiro é o principal
-  ok   o segundo veio junto
-  ok   o lixo não entrou
-  ok   cadastrou com os dois
-  ok   acha pelo fixo dela
-
-9. o número com que a ficha nasceu, depois de removido
-  ok   o removido não acha mais
-  ok   o que ficou continua achando
-  ok   a chave velha continua sendo a casa dele
-  ok   Pedro não foi escrito por cima
-  ok   os dois existem
-  ok   cada número acha o seu dono
-  ok   Pedro manteve o nome
-
-10. não oferecer juntar com quem não tem o número
-  ok   aceita, porque o número não é de ninguém
-  ok   não juntou Clara com o Zé
-  ok   o número é da Clara agora
-  ok   esse sim é de outra pessoa
-  ok   aponta a Clara
-
-tudo passou, sem instalar nada: carrega o nuvem.js e o
+ * Roda com `node scripts/teste.js`, sem instalar nada: carrega o nuvem.js e o
  * app.js num contexto de mentira, com um localStorage de brinquedo no lugar do
  * navegador, e chama as funções direto.
  */
@@ -124,6 +44,10 @@ const {
   chaveDe, achar, criar, adicionarNumero, removerNumero, tornarPrincipal,
   numerosDe, numeroParaFalar, chaveDoNumero, juntarContatos, mesclarContato,
   mesclarNumeros, bonito, limparDaAgenda, __est, __por,
+  carenciaDe, isoDia, somarMeses, lerDinheiro, contratosDe, parcelasPagas,
+  parcelasRestantes, contratoEmAberto, liberaContratoEm, contratoLiberado,
+  terminaContratoEm, quitacaoDe, tetoDe, margemDe, salvarContrato,
+  removerContrato, primeiraPorPagas, situacaoDosContratos, anotarRenda,
 } = ctx;
 
 let falhas = 0;
@@ -312,6 +236,241 @@ ok("o número é da Clara agora", achar("11955551111") === clara);
 r = adicionarNumero(ze, "11977773333");
 ok("esse sim é de outra pessoa", r.desfecho === "de-outro", r);
 ok("aponta a Clara", __est().contatos[r.chave] === clara);
+
+
+// ------------------------------------------------------------------ 11
+console.log("\n11. a carência é um terço do prazo");
+{
+  const escada = { 6:2, 7:3, 8:3, 9:3, 10:4, 11:4, 12:4, 13:5, 14:5, 15:5, 16:6, 17:6, 18:6 };
+  let todos = true;
+  for (const [prazo, esperado] of Object.entries(escada)) {
+    if (carenciaDe(Number(prazo)) !== esperado) {
+      todos = false;
+      ok("prazo " + prazo + " espera " + esperado, false, { deu: carenciaDe(Number(prazo)) });
+    }
+  }
+  ok("os treze prazos da Crefisa batem com a escada", todos);
+  ok("prazo novo cai certo sozinho (24x → 8)", carenciaDe(24) === 8);
+}
+
+// ------------------------------------------------------------------ 12
+console.log("\n12. quando o contrato libera");
+{
+  // 15x com a primeira em 5/jan/2026: carência 5, então a 5ª parcela cai em
+  // 5/mai/2026 — quatro meses depois da primeira, não cinco.
+  const k = { id: "a", tipo: "REFIN", prazo: 15, parcela: 200, primeiraEm: "2026-01-05" };
+  ok("libera na data da 5ª parcela", isoDia(liberaContratoEm(k)) === "2026-05-05",
+     { deu: isoDia(liberaContratoEm(k)) });
+  ok("na véspera ainda está preso", !contratoLiberado(k, "2026-05-04"));
+  ok("no dia já está liberado", contratoLiberado(k, "2026-05-05"));
+  ok("no dia da 1ª parcela conta 1 paga", parcelasPagas(k, "2026-01-05") === 1);
+  ok("um dia antes da 1ª, nenhuma paga", parcelasPagas(k, "2026-01-04") === 0);
+  ok("na data de liberação são 5 pagas", parcelasPagas(k, "2026-05-05") === 5);
+  ok("o contrato acaba na 15ª", isoDia(terminaContratoEm(k)) === "2027-03-05");
+  ok("passado o fim, não passa do prazo", parcelasPagas(k, "2030-01-01") === 15);
+  ok("depois do fim não está mais em aberto", !contratoEmAberto(k, "2027-03-06"));
+  ok("no dia da última ainda está em aberto? não", !contratoEmAberto(k, "2027-03-05"));
+}
+
+// ------------------------------------------------------------------ 13
+console.log("\n13. vencimento no dia 31");
+{
+  // Fevereiro não tem 31. Sem o cuidado, o Date transborda para março e o
+  // vencimento anda um mês — num 18x isso vira meio ano de erro.
+  const k = { id: "b", prazo: 18, parcela: 100, primeiraEm: "2026-01-31" };
+  ok("fevereiro desce para o dia 28", isoDia(somarMeses("2026-01-31", 1)) === "2026-02-28",
+     { deu: isoDia(somarMeses("2026-01-31", 1)) });
+  ok("março volta ao 31", isoDia(somarMeses("2026-01-31", 2)) === "2026-03-31");
+  ok("não pulou de mês em nenhum passo", isoDia(somarMeses("2026-01-31", 12)) === "2027-01-31");
+  ok("a 6ª parcela do 18x cai em junho", isoDia(liberaContratoEm(k)) === "2026-06-30",
+     { deu: isoDia(liberaContratoEm(k)) });
+}
+
+// ------------------------------------------------------------------ 14
+console.log("\n14. quitação é o que falta, cheio");
+{
+  const k = { id: "c", prazo: 15, parcela: 200, primeiraEm: "2026-01-05" };
+  ok("na liberação faltam 10 parcelas", parcelasRestantes(k, "2026-05-05") === 10);
+  ok("quitar na liberação custa 2000", quitacaoDe(k, "2026-05-05") === 2000);
+  ok("mais tarde custa menos", quitacaoDe(k, "2026-10-05") === 1000);
+  ok("quitado não custa nada", quitacaoDe(k, "2027-04-05") === 0);
+}
+
+// ------------------------------------------------------------------ 15
+console.log("\n15. margem por onde o benefício cai");
+{
+  limpar();
+  const c = criar("11988887777", "Dona Rosa");
+  ok("sem renda, não há margem para calcular", margemDe(c) === null);
+
+  anotarRenda(c, "2000,00", "OUTRO");
+  ok("outro banco dá 35%", tetoDe(c) === 700);
+  anotarRenda(c, "2000,00", "CREFISA");
+  ok("na Crefisa dá 60%", tetoDe(c) === 1200);
+  ok("sem contrato, a margem é o teto inteiro", margemDe(c) === 1200);
+
+  salvarContrato(c, { tipo: "NOVO", prazo: 12, parcela: "300", primeiraEm: "2026-08-05" });
+  ok("o contrato prende a parcela", margemDe(c, "2026-09-05") === 900);
+
+  salvarContrato(c, { tipo: "NOVO", prazo: 6, parcela: "150", primeiraEm: "2026-08-05" });
+  ok("dois contratos somam", margemDe(c, "2026-09-05") === 750);
+  ok("contrato encerrado devolve a margem", margemDe(c, "2027-02-05") === 900,
+     { deu: margemDe(c, "2027-02-05") });
+
+  ok("lê vírgula como centavos", lerDinheiro("1.234,56") === 1234.56);
+  ok("lê ponto como centavos quando não há vírgula", lerDinheiro("1234.56") === 1234.56);
+  ok("lê inteiro", lerDinheiro("1234") === 1234);
+  ok("vazio é nada", lerDinheiro("") === null);
+}
+
+// ------------------------------------------------------------------ 16
+console.log("\n16. quem a fila segura e quem ela chama");
+{
+  limpar();
+  // Margem no talo e refinanciamento travado: não há o que oferecer.
+  const preso = criar("11911112222", "Travado");
+  anotarRenda(preso, "1000", "OUTRO");                       // teto 350
+  salvarContrato(preso, { tipo: "NOVO", prazo: 15, parcela: "350", primeiraEm: "2026-08-05" });
+  const s1 = situacaoDosContratos(preso, "2026-09-05");
+  ok("com a margem cheia e o contrato preso, trava", s1.estado === "TRAVADO", s1);
+
+  // Mesma trava, mas sobrou margem: contrato novo não tem prazo, então há
+  // conversa. Esta é a regra que decide quem some da fila.
+  const folga = criar("11933334444", "Com folga");
+  anotarRenda(folga, "3000", "CREFISA");                     // teto 1800
+  salvarContrato(folga, { tipo: "NOVO", prazo: 15, parcela: "350", primeiraEm: "2026-08-05" });
+  const s2 = situacaoDosContratos(folga, "2026-09-05");
+  ok("com margem sobrando, não trava", s2.estado === "SO_MARGEM", s2);
+
+  // Passado o tempo, o refinanciamento libera.
+  const s3 = situacaoDosContratos(preso, "2026-12-05");
+  ok("na 5ª parcela, libera", s3.estado === "LIBERADO", s3);
+  ok("o motivo diz quantas foram pagas", /5 de 15 pagas/.test(s3.motivo), s3.motivo);
+
+  // Um travado e um liberado na mesma pessoa: o liberado manda.
+  const dois = criar("11955556666", "Dois contratos");
+  anotarRenda(dois, "1000", "OUTRO");
+  salvarContrato(dois, { tipo: "NOVO", prazo: 18, parcela: "175", primeiraEm: "2026-08-05" });
+  salvarContrato(dois, { tipo: "NOVO", prazo: 6, parcela: "175", primeiraEm: "2026-06-05" });
+  const s4 = situacaoDosContratos(dois, "2026-09-05");
+  ok("basta um liberado para a pessoa entrar", s4.estado === "LIBERADO", s4);
+  ok("e ele aponta o de 6x", s4.contrato.prazo === 6, s4.contrato);
+
+  ok("sem contrato nenhum, os contratos não opinam",
+     situacaoDosContratos(criar("11977778888", "Sem nada")) === null);
+}
+
+// ------------------------------------------------------------------ 17
+console.log("\n17. cadastrar contrato que já está rolando");
+{
+  // Hoje 20/set/2026, desconto no dia 5, 6 parcelas pagas: a 6ª caiu em
+  // 5/set, então a 1ª foi em 5/abr.
+  ok("6 pagas, dia 5, hoje 20/set → 5/abr",
+     primeiraPorPagas(6, 5, "2026-09-20") === "2026-04-05",
+     { deu: primeiraPorPagas(6, 5, "2026-09-20") });
+
+  // Mesmo caso, mas hoje é dia 3: a do mês ainda não caiu, então a 6ª foi em
+  // agosto e a 1ª em março. Errar isto é ligar um mês antes da hora.
+  ok("antes do dia do desconto, conta um mês a menos",
+     primeiraPorPagas(6, 5, "2026-09-03") === "2026-03-05",
+     { deu: primeiraPorPagas(6, 5, "2026-09-03") });
+
+  ok("uma parcela paga é o próprio mês",
+     primeiraPorPagas(1, 5, "2026-09-20") === "2026-09-05");
+
+  // A volta fecha: cadastrado assim, o app conta as mesmas 6.
+  const k = { prazo: 15, parcela: 100, primeiraEm: primeiraPorPagas(6, 5, "2026-09-20") };
+  ok("e o app volta a contar 6 pagas", parcelasPagas(k, "2026-09-20") === 6);
+}
+
+// ------------------------------------------------------------------ 18
+console.log("\n18. contratos entre dois aparelhos");
+{
+  limpar();
+  const c = criar("11999990000", "Sincronia");
+  salvarContrato(c, { tipo: "NOVO", prazo: 12, parcela: "300", primeiraEm: "2026-01-05" });
+
+  // Cada aparelho cadastrou um contrato diferente da mesma pessoa.
+  const a = JSON.parse(JSON.stringify(c));
+  const b = JSON.parse(JSON.stringify(c));
+  b.contratos.push({ id: "outro", tipo: "REFIN", prazo: 6, parcela: 150,
+                     primeiraEm: "2026-03-05", taxa: null,
+                     ajustadoEm: "2026-03-05T10:00:00.000Z", removidoEm: null });
+
+  const juntos = mesclarContato(a, b);
+  ok("a lista é união, não disputa", contratosDe(juntos).length === 2, juntos.contratos);
+  ok("dá no mesmo na ordem trocada",
+     contratosDe(mesclarContato(b, a)).length === 2);
+
+  // Removido de um lado não pode voltar do outro, senão a margem passa a
+  // contar parcela que já não existe.
+  const removeu = JSON.parse(JSON.stringify(juntos));
+  removerContrato(removeu, "outro");
+  const depois = mesclarContato(removeu, juntos);
+  ok("removido não ressuscita", contratosDe(depois).length === 1, depois.contratos);
+
+  // Correção mais recente vence a versão velha do mesmo contrato.
+  const corrigiu = JSON.parse(JSON.stringify(juntos));
+  const alvo = corrigiu.contratos.find((x) => x.id === "outro");
+  alvo.parcela = 999;
+  alvo.ajustadoEm = new Date().toISOString();
+  const final = mesclarContato(juntos, corrigiu);
+  ok("a correção mais nova vence",
+     contratosDe(final).find((x) => x.id === "outro").parcela === 999);
+
+  // Um lado que nunca ouviu falar em contrato não pode apagar o do outro.
+  const antigo = JSON.parse(JSON.stringify(c));
+  delete antigo.contratos;
+  delete antigo.renda;
+  ok("lado sem o campo não apaga nada",
+     contratosDe(mesclarContato(antigo, juntos)).length === 2);
+}
+
+// ------------------------------------------------------------------ 19
+console.log("\n19. a renda tem carimbo próprio");
+{
+  limpar();
+  const c = criar("11900001111", "Renda");
+  anotarRenda(c, "2000", "CREFISA");
+  const comRenda = JSON.parse(JSON.stringify(c));
+
+  const semRenda = JSON.parse(JSON.stringify(c));
+  semRenda.renda = null;
+  semRenda.rendaEm = null;
+
+  ok("quem tem renda não é apagado por quem não tem",
+     mesclarContato(semRenda, comRenda).renda.valor === 2000);
+  ok("dá no mesmo na ordem trocada",
+     mesclarContato(comRenda, semRenda).renda.valor === 2000);
+
+  // Reajuste anual: o valor mais novo vence.
+  const reajustado = JSON.parse(JSON.stringify(comRenda));
+  reajustado.renda = { valor: 2200, onde: "CREFISA" };
+  reajustado.rendaEm = new Date(Date.now() + 1000).toISOString();
+  ok("o reajuste mais recente vence",
+     mesclarContato(comRenda, reajustado).renda.valor === 2200);
+}
+
+// ------------------------------------------------------------------ 20
+console.log("\n20. o que o contrato recusa e o que ele só avisa");
+{
+  limpar();
+  const c = criar("11900002222", "Conferência");
+  ok("sem prazo, recusa",
+     salvarContrato(c, { parcela: "100", primeiraEm: "2026-01-05" }).desfecho === "invalido");
+  ok("sem parcela, recusa",
+     salvarContrato(c, { prazo: 12, primeiraEm: "2026-01-05" }).desfecho === "invalido");
+  ok("sem data, recusa",
+     salvarContrato(c, { prazo: 12, parcela: "100" }).desfecho === "invalido");
+  ok("nada disso foi guardado", contratosDe(c).length === 0);
+
+  // Prazo fora da faixa AVISA e guarda: barrar a digitação faz desistir de
+  // anotar, e contrato não anotado é margem errada para sempre.
+  const r = salvarContrato(c, { prazo: 24, parcela: "100", primeiraEm: "2026-01-05" });
+  ok("prazo fora da faixa é guardado", r.desfecho === "gravado");
+  ok("mas com aviso", !!r.aviso, r.aviso);
+  ok("e o aviso tem prioridade sobre a confirmação", /Confira/.test(r.aviso));
+}
 
 console.log(falhas ? `\n${falhas} FALHA(S)\n` : "\ntudo passou\n");
 process.exit(falhas ? 1 : 0);

@@ -257,6 +257,28 @@ function mesclarNumeros(a, b) {
   };
 }
 
+/**
+ * Contratos são LISTA, e lista não tem "quem mexeu por último" — teria de
+ * escolher um lado inteiro e jogar o outro fora. Dois aparelhos podem ter
+ * cadastrado contratos DIFERENTES da mesma pessoa, então a junção é união
+ * por id, e só dentro de cada contrato é que o carimbo desempata.
+ *
+ * A lápide vence sempre que for a mexida mais recente: contrato removido num
+ * aparelho não pode voltar do outro, senão a margem passa a contar parcela
+ * que já não existe.
+ */
+function mesclarContratos(a, b) {
+  const porId = new Map();
+  for (const k of [...(a.contratos || []), ...(b.contratos || [])]) {
+    if (!k || !k.id) continue;
+    const tem = porId.get(k.id);
+    if (!tem || new Date(k.ajustadoEm || 0) > new Date(tem.ajustadoEm || 0)) {
+      porId.set(k.id, k);
+    }
+  }
+  return [...porId.values()];
+}
+
 function mesclarContato(a, b) {
   if (!a) return b;
   if (!b) return a;
@@ -273,6 +295,11 @@ function mesclarContato(a, b) {
   const donoCpf = new Date(a.cpfEm || 0) >= new Date(b.cpfEm || 0) ? a : b;
   const outroCpf = donoCpf === a ? b : a;
 
+  // A renda também: o valor do benefício muda no reajuste todo ano, e sem
+  // carimbo o aparelho que ficou parado apagaria o valor novo do outro.
+  const donoRenda = new Date(a.rendaEm || 0) >= new Date(b.rendaEm || 0) ? a : b;
+  const outroRenda = donoRenda === a ? b : a;
+
   return {
     ...mesclarNumeros(a, b),
     nome: a.nome || b.nome || "",
@@ -283,6 +310,9 @@ function mesclarContato(a, b) {
     cpfEm: donoCpf.cpfEm || outroCpf.cpfEm || null,
     beneficio: (donoBen.beneficioEm ? donoBen.beneficio : null) || outroBen.beneficio || null,
     beneficioEm: donoBen.beneficioEm || outroBen.beneficioEm || null,
+    renda: (donoRenda.rendaEm ? donoRenda.renda : null) || outroRenda.renda || null,
+    rendaEm: donoRenda.rendaEm || outroRenda.rendaEm || null,
+    contratos: mesclarContratos(a, b),
     eventos,
   };
 }
