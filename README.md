@@ -267,13 +267,23 @@ envelhece sozinho e obrigaria a voltar no sistema toda vez.
 Prazo fora de 6x–18x **avisa mas guarda**. Barrar a digitação faz desistir de
 anotar, e contrato não anotado é margem errada para sempre.
 
-### Quitar hoje
+### Levar no refinanciamento (não confundir com quitação)
 
-Cada contrato mostra quanto sai para liquidá-lo: **o que falta, cheio**. Não há
-dedução de juros futuros — o refinanciamento é sobre o débito restante inteiro.
+São dois números diferentes, e trocar um pelo outro faz passar valor errado ao
+cliente:
+
+| Operação | O que se paga |
+| --- | --- |
+| **Quitação** — o cliente liquida o contrato | com **abatimento** dos juros futuros, em qualquer banco |
+| **Refinanciamento** — o saldo entra no contrato novo | **sem abatimento**: a soma das parcelas restantes, cheia |
+
+O que a ficha mostra é o **segundo** — o saldo que entra no refinanciamento, que
+é sempre o maior dos dois. O valor de quitação com abatimento o app ainda não
+calcula, e quando calcular vai ter nome e campo próprios.
+
 É por isso que refinanciar na carência rende troco magro: no 15x ainda faltam
-dez parcelas para cobrir antes de sobrar qualquer coisa. A data de liberação é
-o mínimo permitido, não o momento em que vale a pena.
+dez parcelas **cheias** para cobrir antes de sobrar qualquer coisa. A data de
+liberação é o mínimo permitido, não o momento em que vale a pena.
 
 ### O que ainda não faz
 

@@ -46,7 +46,7 @@ const {
   mesclarNumeros, bonito, limparDaAgenda, __est, __por,
   carenciaDe, isoDia, somarMeses, lerDinheiro, contratosDe, parcelasPagas,
   parcelasRestantes, contratoEmAberto, liberaContratoEm, contratoLiberado,
-  terminaContratoEm, quitacaoDe, tetoDe, margemDe, salvarContrato,
+  terminaContratoEm, saldoParaRefinanciar, tetoDe, margemDe, salvarContrato,
   removerContrato, primeiraPorPagas, situacaoDosContratos, anotarRenda,
 } = ctx;
 
@@ -287,13 +287,13 @@ console.log("\n13. vencimento no dia 31");
 }
 
 // ------------------------------------------------------------------ 14
-console.log("\n14. quitação é o que falta, cheio");
+console.log("\n14. o saldo do refinanciamento é o que falta, cheio");
 {
   const k = { id: "c", prazo: 15, parcela: 200, primeiraEm: "2026-01-05" };
   ok("na liberação faltam 10 parcelas", parcelasRestantes(k, "2026-05-05") === 10);
-  ok("quitar na liberação custa 2000", quitacaoDe(k, "2026-05-05") === 2000);
-  ok("mais tarde custa menos", quitacaoDe(k, "2026-10-05") === 1000);
-  ok("quitado não custa nada", quitacaoDe(k, "2027-04-05") === 0);
+  ok("na liberação leva 2000 para o refi", saldoParaRefinanciar(k, "2026-05-05") === 2000);
+  ok("mais tarde leva menos", saldoParaRefinanciar(k, "2026-10-05") === 1000);
+  ok("contrato pago não leva nada", saldoParaRefinanciar(k, "2027-04-05") === 0);
 }
 
 // ------------------------------------------------------------------ 15

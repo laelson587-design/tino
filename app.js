@@ -708,14 +708,22 @@ function terminaContratoEm(k) {
 }
 
 /**
- * Quanto sai para quitar hoje: o que falta, CHEIO.
+ * O saldo que ENTRA NO REFINANCIAMENTO: o que falta, CHEIO.
  *
- * Não há dedução de juros futuros — a Crefisa refinancia sobre o débito
- * restante inteiro. É por isso que refinanciar cedo rende troco magro: na
- * carência de um 15x ainda faltam dez parcelas para cobrir antes de sobrar
- * qualquer coisa para o cliente.
+ * Cuidado para não confundir com quitação, que é outra coisa e outro
+ * número. Quitar o contrato dá abatimento dos juros futuros, em qualquer
+ * banco. Refinanciar NÃO dá: o contrato novo carrega a soma das parcelas
+ * restantes inteira. Este é o número do refinanciamento, e é sempre o
+ * MAIOR dos dois.
+ *
+ * Chamar isto de "quitação" na tela já foi erro uma vez. Se um dia entrar
+ * o valor de quitação de verdade, ele precisa de função e de nome
+ * próprios — mostrar um pelo outro faz passar número errado ao cliente.
+ *
+ * É por isso que refinanciar cedo rende troco magro: na carência de um
+ * 15x ainda faltam dez parcelas CHEIAS para cobrir antes de sobrar algo.
  */
-function quitacaoDe(k, ate = hoje()) {
+function saldoParaRefinanciar(k, ate = hoje()) {
   return parcelasRestantes(k, ate) * Number(k.parcela || 0);
 }
 
@@ -1782,7 +1790,7 @@ function pintarListaDeContratos(c) {
       <p class="andamento">${pagas} de ${k.prazo} pagas${
         aberto ? " · faltam " + faltam : ""}</p>
       <p class="situacao">${escapar(situacao.texto)}</p>
-      ${aberto ? `<p class="quitacao">Quitar hoje: ${escapar(dinheiro(quitacaoDe(k)))}</p>` : ""}
+      ${aberto ? `<p class="quitacao">Levar no refinanciamento: ${escapar(dinheiro(saldoParaRefinanciar(k)))}</p>` : ""}
       <div class="acoes">
         <button class="secundario" data-editar-contrato="${escapar(k.id)}">Corrigir</button>
         <button class="secundario" data-tirar-contrato="${escapar(k.id)}">Remover</button>
