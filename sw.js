@@ -9,7 +9,7 @@
  * Suba a VERSAO quando quiser forçar a limpeza imediata de todo mundo.
  */
 
-const VERSAO = "tino-v24";
+const VERSAO = "tino-v25";
 
 /* Os arquivos vão com o mesmo ?v= que o index.html usa, senão o install
    busca uma cópia sem versão e o navegador entrega a dele, antiga. */

@@ -65,7 +65,7 @@ const TIPOS_BENEFICIO = [
  * funciona no celular, saber se o app é o novo ou um pedaço velho preso no
  * cache. Aparece no diagnóstico, e sobe junto com a VERSAO do sw.js e com
  * o ?v= dos arquivos no index.html — os três SEMPRE juntos. */
-const VERSAO_APP = 24;
+const VERSAO_APP = 25;
 
 const PADRAO = {
   versao: 1,
@@ -3447,14 +3447,25 @@ function ligar() {
   });
   $("#sn-dia").addEventListener("input", pintarCarenciaDoSimulador);
 
+  /* Um botão que não responde é o pior defeito possível num app de
+     celular: não há console para abrir, e quem usa conclui que o app
+     travou. Se a conta explodir por qualquer motivo, o erro aparece na
+     tela em vez de sumir no vazio. */
   $("#sn-calcular").addEventListener("click", () => {
+   try {
+    const dias = carenciaDoSimulador();
+    if (!dias) {
+      return pintarResultadoSolto({
+        erro: "Informe o dia do pagamento do benefício — é ele que dá a carência.",
+      });
+    }
     const taxa = lerDinheiro($("#sn-taxa").value);
     const s = simularContrato({
       modo: simuladorPorValor ? "valor" : "parcela",
       parcela: $("#sn-parcela").value,
       valor: $("#sn-valor").value,
       prazo: $("#sn-prazo").value,
-      dias: carenciaDoSimulador(),
+      dias,
       taxa: $("#sn-taxa").value.trim() === "" ? 0 : taxa,
       tcc: $("#sn-tcc").checked,
     });
@@ -3466,6 +3477,10 @@ function ligar() {
       ajustesMexidos();
       guardar();
     }
+   } catch (e) {
+    console.error(e);
+    pintarResultadoSolto({ erro: "Não consegui calcular: " + e.message });
+   }
   });
 
   $("#sim-contrato").addEventListener("change", () => {
@@ -3476,11 +3491,13 @@ function ligar() {
     $("#sim-resultado").classList.add("oculto");
   });
 
+  /* Mesmo cuidado do botão da aba Simular: nunca ficar mudo. */
   $("#sim-calcular").addEventListener("click", () => {
+   try {
     const c = estado.contatos[chaveFicha];
     if (!c) return;
     const k = contratosDe(c).find((x) => x.id === $("#sim-contrato").value);
-    if (!k) return avisar("Escolha o contrato.");
+    if (!k) return pintarResultadoDaSimulacao({ erro: "Escolha o contrato." });
 
     // Campo de taxa vazio precisa RECUSAR, não cair na taxa guardada no
     // contrato: a tela mostraria o campo em branco e um troco embaixo,
@@ -3494,6 +3511,10 @@ function ligar() {
       parcela: $("#sim-parcela").value,
       tcc: $("#sim-tcc").checked ? undefined : false,
     }));
+   } catch (e) {
+    console.error(e);
+    pintarResultadoDaSimulacao({ erro: "Não consegui calcular: " + e.message });
+   }
   });
 
   $("#ficha-contratos").addEventListener("click", (ev) => {
